@@ -4,7 +4,7 @@ import '../../core/constants/app_colors.dart';
 import 'chat_message_model.dart';
 import '../../ui/components/chat_bubble.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../state/simulation_state.dart';
+import '../../state/simulation_state.dart'; // Используем simulationsProvider
 
 class AssistantScreen extends ConsumerStatefulWidget {
   const AssistantScreen({super.key});
@@ -48,8 +48,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     _controller.clear();
     _scrollToBottom();
 
-    // Получаем данные симуляции
-    final simulation = ref.read(simulationProvider);
+    // Получаем данные симуляций
+    final simulations = ref.read(simulationsProvider);
+    final latestSimulation = simulations.isNotEmpty ? simulations.last : null;
 
     // Симуляция ответа AI
     Future.delayed(const Duration(seconds: 1, milliseconds: 300), () {
@@ -57,20 +58,17 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
       String aiResponse;
 
-      // Проверяем на null и добавляем кастомное свойство isReady
-      final isSimulationReady = simulation != null; // Проверяем, есть ли данные
-
-      if (!isSimulationReady) {
+      if (simulations.isEmpty) {
         aiResponse =
             "Я пока не вижу данных симуляции. Запусти или загрузи симуляцию — и я дам точный анализ.";
       } else {
-        // Теперь simulation точно не null
-        // Используем свойства из вашего SimulationResult
-        // Если нет свойства data.length, нужно добавить его в модель
+        // Анализируем последнюю симуляцию
         aiResponse =
-            "Я проанализировал симуляцию.\n"
-            "Входные данные: \"${simulation.input}\"\n"
-            "Рекомендация: ${simulation.recommendation}";
+            "Я проанализировал ваши симуляции (всего: ${simulations.length}).\n"
+            "Последняя симуляция: \"${latestSimulation!.scenarioTitle}\"\n"
+            "Интерес: ${(latestSimulation.metrics['interest']! * 100).toInt()}%\n"
+            "Нагрузка: ${(latestSimulation.metrics['workload']! * 100).toInt()}%\n"
+            "Рекомендация: ${latestSimulation.recommendation}";
       }
 
       setState(() {
@@ -102,7 +100,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final simulation = ref.watch(simulationProvider);
+    final simulations = ref.watch(simulationsProvider);
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -111,12 +109,16 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         elevation: 0,
         backgroundColor: Colors.white,
         actions: [
-          // Можно показать иконку статуса симуляции
+          // Показываем количество симуляций
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: Icon(
-              simulation == null ? Icons.sync_disabled : Icons.sync,
-              color: simulation == null ? Colors.grey : AppColors.primary,
+            child: Badge(
+              label: Text('${simulations.length}'),
+              isLabelVisible: simulations.isNotEmpty,
+              child: Icon(
+                simulations.isEmpty ? Icons.sync_disabled : Icons.sync,
+                color: simulations.isEmpty ? Colors.grey : AppColors.primary,
+              ),
             ),
           ),
         ],
@@ -179,9 +181,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                       controller: _controller,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: simulation == null
-                            ? "Спроси что-нибудь..." // если нет симуляции
-                            : "Спроси про симуляцию \"${simulation.input}\"...", // если есть симуляция
+                        hintText: simulations.isEmpty
+                            ? "Спроси что-нибудь о симуляциях..."
+                            : "Спроси про '${simulations.last.scenarioTitle}'...",
                         hintStyle: TextStyle(color: AppColors.textSecondary),
                         filled: true,
                         fillColor: AppColors.surface,

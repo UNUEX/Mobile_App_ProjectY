@@ -24,7 +24,10 @@ class AppRouter {
       case simulation:
         return MaterialPageRoute(builder: (_) => const SimulationScreen());
       case analytics:
-        return MaterialPageRoute(builder: (_) => const AnalyticsScreen());
+        final args = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => AnalyticsScreen(initialFilters: args),
+        );
       case assistant:
         return MaterialPageRoute(builder: (_) => const AssistantScreen());
       case profile:
@@ -42,32 +45,20 @@ class AppRouter {
     }
   }
 
-  // Методы для удобной навигации
-  static void goToSimulation(BuildContext context) {
+  static void goToSimulation(BuildContext context, {bool runNew = false}) {
     Navigator.pushNamed(context, simulation);
+  }
+
+  static void goToAnalytics(BuildContext context, {String? category}) {
+    final args = category != null ? {'initialCategory': category} : null;
+    Navigator.pushNamed(context, analytics, arguments: args);
   }
 
   static void goToAssistant(BuildContext context) {
     Navigator.pushNamed(context, assistant);
   }
 
-  static void goToAnalytics(BuildContext context) {
-    Navigator.pushNamed(context, analytics);
-  }
-
-  static void goToProfile(BuildContext context) {
-    Navigator.pushNamed(context, profile);
-  }
-
   static void goBack(BuildContext context) {
     Navigator.pop(context);
-  }
-
-  static void goToDigitalTwin(BuildContext context) {
-    Navigator.pushNamed(context, digitalTwin);
-  }
-
-  static void goToYourState(BuildContext context) {
-    Navigator.pushNamed(context, yourState);
   }
 }
