@@ -1,2 +1,3 @@
-# Mobile_App_ProjectY
-Mobile application powered by ai
+# yauctor_ai
+
+A new Flutter project.
