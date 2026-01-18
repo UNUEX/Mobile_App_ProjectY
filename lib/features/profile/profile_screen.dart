@@ -1,5 +1,6 @@
 // lib/features/profile/profile_screen.dart
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Не забудь добавить этот пакет
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -9,204 +10,258 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  double energyLevel = 0.7;
-  double stressLevel = 0.4;
+  // Переменные состояния
+  String _userName = "Traveler"; // Имя по умолчанию, пока грузится
+  double energyLevel = 0.68;
+  double stressLevel = 0.42;
+
+  // Цвета (как в других экранах)
+  final Color _accentColor = const Color(0xFF8B5CF6);
+  final Color _lightAccentColor = const Color(0xFFF3E8FF);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+  }
+
+  // Загрузка имени из памяти
+  Future<void> _loadUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // Если имя не найдено, останется "Traveler"
+      _userName = prefs.getString('userName') ?? "Traveler";
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(0),
+      appBar: AppBar(
+        title: const Text(
+          'Profile',
+          style: TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.black87),
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        child: Column(
           children: [
-            // Header with Avatar
-            _buildHeader(),
+            const SizedBox(height: 20),
 
-            const SizedBox(height: 8),
+            // --- 1. AVATAR & NAME ---
+            _buildProfileHeader(),
 
-            // Stats Cards
-            _buildStatsSection(),
+            const SizedBox(height: 32),
 
-            const Divider(height: 32, thickness: 8, color: Color(0xFFF5F5F5)),
+            // --- 2. STATS (Как в Digital Twin) ---
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    "Energy",
+                    "${(energyLevel * 100).toInt()}%",
+                    energyLevel,
+                    true,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatCard(
+                    "Stress",
+                    "${(stressLevel * 100).toInt()}%",
+                    stressLevel,
+                    false,
+                  ),
+                ),
+              ],
+            ),
 
-            // Menu Items
-            _buildMenuItem(
+            const SizedBox(height: 32),
+
+            // --- 3. MENU ITEMS ---
+            // Заголовок секции
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                "Settings & Preferences",
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            _buildMenuTile(
               icon: Icons.person_outline,
-              title: 'Edit Profile',
+              title: "Personal Data",
               onTap: () {},
             ),
-            _buildMenuItem(
-              icon: Icons.interests_outlined,
-              title: 'Interests',
-              subtitle: 'Technology, Psychology, Self-development',
+            _buildMenuTile(
+              icon: Icons.notifications_none,
+              title: "Notifications",
               onTap: () {},
             ),
-
-            const Divider(height: 1, indent: 16, endIndent: 16),
-
-            _buildMenuItem(
-              icon: Icons.notifications_outlined,
-              title: 'Notifications',
+            _buildMenuTile(
+              icon: Icons.shield_outlined,
+              title: "Privacy & Security",
               onTap: () {},
             ),
-            _buildMenuItem(
-              icon: Icons.lock_outline,
-              title: 'Privacy & Security',
-              onTap: () {},
-            ),
-
-            const Divider(height: 1, indent: 16, endIndent: 16),
-
-            _buildMenuItem(
-              icon: Icons.help_outline,
-              title: 'Help & Support',
-              onTap: () {},
-            ),
-            _buildMenuItem(
-              icon: Icons.info_outline,
-              title: 'About',
+            _buildMenuTile(
+              icon: Icons.history,
+              title: "Simulation History",
               onTap: () {},
             ),
 
             const SizedBox(height: 24),
+
+            // Log Out Button
+            TextButton(
+              onPressed: () {
+                // Логика выхода
+              },
+              child: Text(
+                "Log Out",
+                style: TextStyle(
+                  color: Colors.red[400],
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          // Avatar
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+  // Виджет шапки профиля
+  Widget _buildProfileHeader() {
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: _lightAccentColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 4),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  _userName.isNotEmpty ? _userName[0].toUpperCase() : "T",
+                  style: TextStyle(
+                    fontSize: 40,
+                    color: _accentColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
-            child: const Icon(Icons.person, color: Colors.white, size: 40),
-          ),
-
-          const SizedBox(width: 20),
-
-          // Name and Context
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Your Profile',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Work',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
-                  ),
-                ),
-              ],
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _accentColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(Icons.edit, size: 14, color: Colors.white),
             ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _userName,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Explorer Mode", // Можно менять статус
+          style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+        ),
+      ],
     );
   }
 
-  Widget _buildStatsSection() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildStatCard(
-              label: 'Energy',
-              value: energyLevel,
-              icon: Icons.bolt,
-              color: const Color(0xFF10B981),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildStatCard(
-              label: 'Stress',
-              value: stressLevel,
-              icon: Icons.psychology,
-              color: const Color(0xFFF59E0B),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Карточка статистики (Energy / Stress)
+  Widget _buildStatCard(
+    String title,
+    String value,
+    double percent,
+    bool isEnergy,
+  ) {
+    // Для энергии используем фиолетовый, для стресса - можно другой оттенок или тот же
+    final color = isEnergy
+        ? _accentColor
+        : const Color(0xFF7C3AED); // Чуть темнее для стресса
 
-  Widget _buildStatCard({
-    required String label,
-    required double value,
-    required IconData icon,
-    required Color color,
-  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFFF9FAFB), // Светло-серый фон как база
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(width: 6),
+              Icon(
+                isEnergy ? Icons.flash_on_rounded : Icons.waves,
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: 8),
               Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.w500,
-                ),
+                title,
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            '${(value * 100).toInt()}%',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: color,
-              letterSpacing: -1,
-            ),
+            value,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: value,
-              minHeight: 4,
-              backgroundColor: Colors.white.withValues(alpha: 0.5),
+              value: percent,
+              minHeight: 6,
+              backgroundColor: color.withValues(alpha: 0.1),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
@@ -215,37 +270,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildMenuItem({
+  // Элемент меню (Стиль как FeatureTile из Home)
+  Widget _buildMenuTile({
     required IconData icon,
     required String title,
-    String? subtitle,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(10),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _lightAccentColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: _accentColor, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey[300], size: 24),
+            ],
+          ),
         ),
-        child: Icon(icon, color: const Color(0xFF666666), size: 22),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle,
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
-      trailing: Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
     );
   }
 }

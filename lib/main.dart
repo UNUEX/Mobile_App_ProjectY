@@ -1,7 +1,7 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:yauctor_ai/core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
-import 'ui/layout/main_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() {
@@ -17,7 +17,8 @@ class YauctorApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Yauctor',
       theme: AppTheme.light(),
-      home: const MainLayout(), // ← MainLayout как главный экран
+      initialRoute: AppRouter.onboarding,
+      onGenerateRoute: AppRouter.generateRoute,
     );
   }
 }

@@ -1,9 +1,10 @@
 // lib/features/home/home_screen.dart
 import 'package:flutter/material.dart';
-import '../../core/constants/app_colors.dart';
 import '../digital_twin/digital_twin_screen.dart';
 import '../simulation/simulation_screen.dart';
 import '../your_state/your_state_screen.dart';
+// Импортируй экран AI Navigator, если он уже создан, или оставь пока без импорта
+// import '../ai_navigator/ai_navigator_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -11,34 +12,41 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      // Используем белый фон или очень светлый, чтобы карточки выделялись
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Logo / Title
+                // --- Logo / Title ---
                 const Text(
                   "Yauctor.ai",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   "Your personal navigation platform",
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 15),
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
 
-                // Hero Card
+                // --- Hero Card (Фиолетовая) ---
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
+                    // Цвет фона карточки (Lavender / Light Purple)
+                    color: const Color(0xFFF5F3FF),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,33 +54,37 @@ class HomeScreen extends StatelessWidget {
                       const Text(
                         "What if you had chosen a different path?",
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF2D2D2D),
+                          height: 1.3,
                         ),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         "Explore without commitment. Understand without pressure.",
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 32),
 
-                // Section title
-                Text(
-                  "Explore Features",
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
+                // --- Section title ---
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 16),
+                  child: Text(
+                    "Explore Features",
+                    style: TextStyle(color: Colors.grey[500], fontSize: 14),
                   ),
                 ),
 
-                const SizedBox(height: 12),
-
-                // Features list
+                // --- Features list ---
                 _FeatureTile(
                   icon: Icons.person_outline,
                   title: "Digital Twin",
@@ -114,6 +126,19 @@ class HomeScreen extends StatelessWidget {
                     );
                   },
                 ),
+                _FeatureTile(
+                  icon: Icons.chat_bubble_outline,
+                  title: "AI Navigator",
+                  subtitle: "Ask questions, get clarity, find direction",
+                  onTap: () {
+                    // Пока просто заглушка, так как файла экрана нет
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("AI Navigator coming soon!"),
+                      ),
+                    );
+                  },
+                ),
 
                 const SizedBox(height: 40),
               ],
@@ -140,49 +165,100 @@ class _FeatureTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: AppColors.primary),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+    // 1. Container отвечает за внешний вид (тень, рамка, скругление)
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.grey.withValues(alpha: 0.15),
+        ), // Тонкая рамка
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03), // Очень легкая тень
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      // 2. Material нужен для отрисовки эффекта InkWell (волны) поверх фона
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20), // Ограничиваем волну краями
+          onTap: onTap,
+          // Настройка цвета волны при нажатии
+          splashColor: const Color(0xFF9333EA).withValues(alpha: 0.1),
+          highlightColor: const Color(0xFF9333EA).withValues(alpha: 0.05),
+          child: Padding(
+            padding: const EdgeInsets.all(20), // Внутренний отступ
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment
+                  .start, // Выравнивание по верху, если текст длинный
+              children: [
+                // Иконка в квадрате
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(
+                      0xFFF3E8FF,
+                    ), // Светло-фиолетовый фон иконки
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
+                  child: Icon(
+                    icon,
+                    color: const Color(0xFF9333EA), // Насыщенный фиолетовый
+                    size: 24,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 16),
+                // Текстовая часть
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          top: 2,
+                        ), // Чуть опустить заголовок для выравнивания с иконкой
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Стрелочка справа
+                Padding(
+                  padding: const EdgeInsets.only(
+                    top: 12,
+                  ), // Выравнивание стрелки
+                  child: Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey[300],
+                    size: 24,
+                  ),
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right, color: Colors.grey),
-          ],
+          ),
         ),
       ),
     );
