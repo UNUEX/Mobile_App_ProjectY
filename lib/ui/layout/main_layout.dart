@@ -1,10 +1,10 @@
 // lib/ui/layout/main_layout.dart
 import 'package:flutter/material.dart';
 import '../../features/home/home_screen.dart';
-import '../../features/simulation/simulation_screen.dart';
-import '../../features/analytics/analytics_screen.dart';
 import '../../features/assistant/assistant_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/dashboard/dashboard_screen.dart';
+import '../../features/journey/journey_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -18,8 +18,8 @@ class _MainLayoutState extends State<MainLayout> {
 
   final List<Widget> _screens = const [
     HomeScreen(),
-    SimulationScreen(),
-    AnalyticsScreen(),
+    DashboardScreen(),
+    JourneyScreen(),
     AssistantScreen(),
     ProfileScreen(),
   ];
@@ -41,12 +41,12 @@ class _MainLayoutState extends State<MainLayout> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
-            icon: Icon(Icons.science),
-            label: 'Simulation',
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),
-            label: 'Analytics',
+            label: 'Journey',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'AI'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
