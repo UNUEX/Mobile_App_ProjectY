@@ -8,6 +8,7 @@ import '../../features/profile/profile_screen.dart';
 import '../../features/digital_twin/digital_twin_screen.dart';
 import '../../features/your_state/your_state_screen.dart';
 import '../../features/onboarding/welcome_questionnaire_screen.dart';
+import '../../features/auth/auth_screen.dart';
 
 class AppRouter {
   static const String onboarding = '/onboarding';
@@ -18,6 +19,7 @@ class AppRouter {
   static const String profile = '/profile';
   static const String digitalTwin = '/digital-twin';
   static const String yourState = '/your-state';
+  static const String auth = '/auth';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -39,6 +41,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const DigitalTwinScreen());
       case yourState:
         return MaterialPageRoute(builder: (_) => const YourStateScreen());
+      case auth:
+        return MaterialPageRoute(builder: (_) => const AuthScreen());
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

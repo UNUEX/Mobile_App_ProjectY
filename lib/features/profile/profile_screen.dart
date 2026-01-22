@@ -1,9 +1,12 @@
 // lib/features/profile/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:yauctor_ai/features/auth/auth_screen.dart';
 import 'package:yauctor_ai/features/digital_twin/digital_twin_deep_profile.dart';
 import 'package:yauctor_ai/features/digital_twin/digital_twin_setup_screen.dart';
 import 'package:yauctor_ai/features/digital_twin/digital_twin_avatar_screen.dart';
+import 'package:yauctor_ai/features/profile/profile_edit_screen.dart'; // Импортируйте экран редактирования
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,9 +16,11 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // --- ЛОГИКА СОХРАНЕНИЯ (ОСТАНЕТСЯ) ---
+  // --- ЛОГИКА СОХРАНЕНИЯ ---
   String _userName = "Traveler";
-  final String _userEmail = "alex@yauctor.ai";
+  String _userEmail = "alex@yauctor.ai";
+  bool _isLoggedIn = false;
+  String? _avatarUrl; // Добавлено для аватара
 
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = false;
@@ -26,13 +31,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _checkAuthStatus();
     _loadUserName();
+    _loadAvatar(); // Загружаем аватар
+  }
+
+  Future<void> _checkAuthStatus() async {
+    final authState = Supabase.instance.client.auth.currentSession;
+    setState(() {
+      _isLoggedIn = authState != null;
+    });
+
+    if (_isLoggedIn) {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null && user.email != null) {
+        setState(() {
+          _userEmail = user.email!;
+        });
+      }
+    }
   }
 
   Future<void> _loadUserName() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _userName = prefs.getString('userName') ?? "Alex Morgan";
+    });
+  }
+
+  Future<void> _loadAvatar() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _avatarUrl = prefs.getString('avatarUrl');
+    });
+  }
+
+  Future<void> _logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const AuthScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Ошибка выхода: $e')));
+    }
+  }
+
+  void _navigateToAuth() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AuthScreen()),
+    ).then((_) {
+      _checkAuthStatus();
+      _loadUserName();
+      _loadAvatar();
+    });
+  }
+
+  void _navigateToProfileEdit() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
+    ).then((value) {
+      // Обновляем данные после возврата с экрана редактирования
+      if (value == true) {
+        _loadUserName();
+        _loadAvatar();
+      }
     });
   }
 
@@ -104,60 +176,177 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Column(
                       children: [
+                        // Аватар и информация
                         Row(
                           children: [
-                            Stack(
-                              children: [
-                                CircleAvatar(
-                                  radius: 36,
-                                  backgroundColor: const Color(0xFFE0D4FC),
-                                  child: const Icon(
-                                    Icons.person,
-                                    size: 40,
-                                    color: Color(0xFF8B5CF6),
-                                  ),
-                                ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
+                            // Аватар с возможностью нажатия
+                            InkWell(
+                              onTap: _navigateToProfileEdit,
+                              borderRadius: BorderRadius.circular(40),
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    width: 72,
+                                    height: 72,
+                                    decoration: BoxDecoration(
                                       shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.grey[200]!,
+                                        width: 2,
+                                      ),
                                     ),
-                                    child: const Icon(
-                                      Icons.edit,
-                                      size: 14,
-                                      color: Colors.grey,
+                                    child: ClipOval(
+                                      child: _avatarUrl != null
+                                          ? Image.network(
+                                              _avatarUrl!,
+                                              fit: BoxFit.cover,
+                                              loadingBuilder: (context, child, loadingProgress) {
+                                                if (loadingProgress == null) {
+                                                  return child;
+                                                }
+                                                return Container(
+                                                  color: const Color(
+                                                    0xFFE0D4FC,
+                                                  ),
+                                                  child: Center(
+                                                    child: CircularProgressIndicator(
+                                                      value:
+                                                          loadingProgress
+                                                                  .expectedTotalBytes !=
+                                                              null
+                                                          ? loadingProgress
+                                                                    .cumulativeBytesLoaded /
+                                                                loadingProgress
+                                                                    .expectedTotalBytes!
+                                                          : null,
+                                                      color: _primaryPurple,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: const Color(
+                                                        0xFFE0D4FC,
+                                                      ),
+                                                      child: Icon(
+                                                        _isLoggedIn
+                                                            ? Icons.person
+                                                            : Icons
+                                                                  .person_outline,
+                                                        size: 40,
+                                                        color: _primaryPurple,
+                                                      ),
+                                                    );
+                                                  },
+                                            )
+                                          : Container(
+                                              color: const Color(0xFFE0D4FC),
+                                              child: Icon(
+                                                _isLoggedIn
+                                                    ? Icons.person
+                                                    : Icons.person_outline,
+                                                size: 40,
+                                                color: _primaryPurple,
+                                              ),
+                                            ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black12,
+                                            blurRadius: 4,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Icon(
+                                        Icons.edit,
+                                        size: 14,
+                                        color: _primaryPurple,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(width: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _userName,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _userName,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  _userEmail,
-                                  style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 14,
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _userEmail,
+                                    style: TextStyle(
+                                      color: Colors.grey[500],
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _isLoggedIn
+                                        ? '✅ Авторизован'
+                                        : '⚠️ Не авторизован',
+                                    style: TextStyle(
+                                      color: _isLoggedIn
+                                          ? Colors.green
+                                          : Colors.orange,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 24),
+
+                        // Показываем кнопку авторизации, если пользователь не вошел
+                        if (!_isLoggedIn)
+                          Column(
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: _navigateToAuth,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _primaryPurple,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Войти / Зарегистрироваться',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+
+                        // Статистика
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -197,9 +386,147 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 24),
 
+                  // Если пользователь не авторизован, показываем сообщение
+                  if (!_isLoggedIn)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3CD),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFFEEBA)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.orange[800],
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Авторизация',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Войдите в систему, чтобы синхронизировать данные между устройствами и получить полный доступ ко всем функциям.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // --- Auth Quick Action ---
+                  if (!_isLoggedIn)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [_primaryPurple, const Color(0xFF7C3AED)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _primaryPurple.withValues(alpha: 0.3),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.lock_open,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Разблокируйте все возможности',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Войдите для синхронизации данных и полного доступа',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          ElevatedButton(
+                            onPressed: _navigateToAuth,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                            ),
+                            child: Text(
+                              'Войти',
+                              style: TextStyle(
+                                color: _primaryPurple,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // --- Digital Twin Banner ---
                   InkWell(
                     onTap: () {
+                      if (!_isLoggedIn) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Пожалуйста, войдите в систему для доступа к Digital Twin',
+                            ),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        _navigateToAuth();
+                        return;
+                      }
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -242,11 +569,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 12),
-                                  const Column(
+                                  Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
+                                      const Text(
                                         "Digital Twin",
                                         style: TextStyle(
                                           color: Colors.white,
@@ -255,7 +582,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                       ),
                                       Text(
-                                        "Your AI-powered persona",
+                                        _isLoggedIn
+                                            ? "Your AI-powered persona"
+                                            : "Авторизуйтесь для доступа",
                                         style: TextStyle(
                                           color: Colors.white70,
                                           fontSize: 12,
@@ -274,7 +603,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 20),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: const [
+                            children: [
                               Text(
                                 "Profile Completion",
                                 style: TextStyle(
@@ -283,7 +612,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                               Text(
-                                "85%",
+                                _isLoggedIn ? "85%" : "0%",
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -295,7 +624,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
-                              value: 0.85,
+                              value: _isLoggedIn ? 0.85 : 0.0,
                               minHeight: 6,
                               backgroundColor: Colors.white.withValues(
                                 alpha: 0.3,
@@ -307,7 +636,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "Complete your twin to unlock deeper simulations",
+                            _isLoggedIn
+                                ? "Complete your twin to unlock deeper simulations"
+                                : "Войдите, чтобы создать своего Digital Twin",
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.8),
                               fontSize: 11,
@@ -331,6 +662,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           iconColor: _primaryPurple,
                           bgColor: const Color(0xFFF3E8FF),
                           onTap: () {
+                            if (!_isLoggedIn) {
+                              _navigateToAuth();
+                              return;
+                            }
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -338,7 +673,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     const DigitalTwinSetupScreen(),
                               ),
                             ).then((_) {
-                              // Обновляем данные после возврата (если нужно)
                               _loadUserName();
                             });
                           },
@@ -353,6 +687,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           iconColor: const Color(0xFF3B82F6),
                           bgColor: const Color(0xFFDBEAFE),
                           onTap: () {
+                            if (!_isLoggedIn) {
+                              _navigateToAuth();
+                              return;
+                            }
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -500,26 +838,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 32),
 
-                  // --- Log Out Button ---
+                  // --- Log Out / Sign In Button ---
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        // Логика выхода
-                      },
+                      onPressed: _isLoggedIn ? _logout : _navigateToAuth,
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFFFCCCC)),
+                        side: BorderSide(
+                          color: _isLoggedIn
+                              ? const Color(0xFFFFCCCC)
+                              : const Color(0xFF8B5CF6),
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
                         backgroundColor: Colors.white,
                       ),
-                      icon: const Icon(Icons.logout, color: Colors.red),
-                      label: const Text(
-                        "Log Out",
+                      icon: Icon(
+                        _isLoggedIn ? Icons.logout : Icons.login,
+                        color: _isLoggedIn
+                            ? Colors.red
+                            : const Color(0xFF8B5CF6),
+                      ),
+                      label: Text(
+                        _isLoggedIn ? "Log Out" : "Sign In / Register",
                         style: TextStyle(
-                          color: Colors.red,
+                          color: _isLoggedIn
+                              ? Colors.red
+                              : const Color(0xFF8B5CF6),
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -542,7 +889,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "Your personal navigation platform",
+                          _isLoggedIn
+                              ? "Добро пожаловать, $_userName!"
+                              : "Ваша личная навигационная платформа",
                           style: TextStyle(
                             color: Colors.grey[300],
                             fontSize: 10,
