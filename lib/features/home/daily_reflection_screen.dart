@@ -1,36 +1,28 @@
 // lib/features/home/daily_reflection_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'providers/daily_reflection_provider.dart';
+import 'models/daily_reflection_model.dart';
 
-class DailyReflectionScreen extends StatefulWidget {
+class DailyReflectionScreen extends ConsumerStatefulWidget {
   const DailyReflectionScreen({super.key});
 
   @override
-  State<DailyReflectionScreen> createState() => _DailyReflectionScreenState();
+  ConsumerState<DailyReflectionScreen> createState() =>
+      _DailyReflectionScreenState();
 }
 
-class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
+class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
   final TextEditingController _textController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
 
   // Цветовая палитра
   final Color _accentColor = const Color(0xFF8B5CF6);
   final Color _lightBg = const Color(0xFFF5F3FF);
   final Color _darkText = const Color(0xFF1F1F29);
-
-  // Сохраненные записи (в реальном приложении это было бы в базе данных)
-  final List<Map<String, String>> _entries = [
-    {
-      'date': '2024-03-15',
-      'text':
-          'Сегодня был продуктивный день. Завершил проект и чувствую удовлетворение.',
-    },
-    {
-      'date': '2024-03-14',
-      'text':
-          'Чувствовал усталость, но вечерняя прогулка помогла восстановить энергию.',
-    },
-  ];
+  final Color _successColor = const Color(0xFF10B981);
 
   @override
   void initState() {
@@ -38,6 +30,19 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
     // Автоматически фокусируемся на поле ввода при открытии
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_focusNode);
+      _scrollToTop();
+    });
+  }
+
+  void _scrollToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
@@ -45,35 +50,72 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
   void dispose() {
     _textController.dispose();
     _focusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   void _saveEntry() {
-    if (_textController.text.trim().isNotEmpty) {
-      setState(() {
-        _entries.insert(0, {
-          'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-          'text': _textController.text,
-        });
-        _textController.clear();
+    final text = _textController.text.trim();
+    if (text.isNotEmpty) {
+      ref.read(dailyReflectionsProvider.notifier).addReflection(text);
+      _textController.clear();
 
-        // Показываем подтверждение
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Запись сохранена'),
-            backgroundColor: _accentColor,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+      // Показываем подтверждение
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Запись сохранена'),
+          backgroundColor: _successColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
           ),
-        );
-      });
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Прокручиваем к началу, чтобы увидеть новую запись
+      _scrollToTop();
     }
+  }
+
+  void _deleteEntry(String id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Удалить запись?"),
+        content: const Text("Эта запись будет удалена безвозвратно."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Отмена"),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(dailyReflectionsProvider.notifier).deleteReflection(id);
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Запись удалена'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            },
+            child: const Text("Удалить", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final reflectionsAsync = ref.watch(dailyReflectionsProvider);
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -93,92 +135,177 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.more_vert, color: _darkText),
+            icon: Icon(Icons.refresh, color: _darkText),
             onPressed: () {
-              // Дополнительные действия (экспорт, настройки и т.д.)
+              ref.read(dailyReflectionsProvider.notifier).refresh();
             },
+            tooltip: 'Обновить',
           ),
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Заголовок с текущей датой
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 16,
-                ),
-                child: Text(
-                  DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
+        child: reflectionsAsync.when(
+          data: (reflections) => _buildContent(reflections),
+          loading: () => _buildLoading(),
+          error: (error, stackTrace) => _buildError(error.toString()),
+        ),
+      ),
+    );
+  }
 
-              // Поле для новой записи
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      // Текущая запись
-                      Container(
-                        decoration: BoxDecoration(
-                          color: _lightBg,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: _accentColor.withValues(alpha: 0.2),
-                          ),
+  Widget _buildContent(List<DailyReflectionModel> reflections) {
+    final hasEntries = reflections.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Статистика
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: _lightBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Всего записей',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    Text(
+                      '${reflections.length}',
+                      style: TextStyle(
+                        color: _darkText,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Последняя запись',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    Text(
+                      hasEntries
+                          ? DateFormat('dd.MM').format(reflections.first.date)
+                          : '—',
+                      style: TextStyle(
+                        color: _darkText,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Заголовок с текущей датой
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Text(
+              DateFormat('EEEE, d MMMM yyyy').format(DateTime.now()),
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+
+          // Поле для новой записи
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              child: Column(
+                children: [
+                  // Текущая запись
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _lightBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _accentColor.withAlpha((0.2 * 255).toInt()),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accentColor.withAlpha((0.1 * 255).toInt()),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
-                        padding: const EdgeInsets.all(20),
-                        margin: const EdgeInsets.only(bottom: 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(20),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
+                            Icon(
+                              Icons.edit_note_rounded,
+                              color: _accentColor,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
                             Text(
                               "Today's Thoughts",
                               style: TextStyle(
                                 color: _accentColor,
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: _textController,
-                              focusNode: _focusNode,
-                              maxLines: null,
-                              style: TextStyle(
                                 fontSize: 16,
-                                color: _darkText,
-                                height: 1.5,
                               ),
-                              decoration: InputDecoration(
-                                hintText:
-                                    'Как прошел ваш день? Что вы чувствуете? О чем думаете?\n\nЭти записи помогают обучать ваш Digital Twin...',
-                                hintStyle: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 16,
-                                ),
-                                border: InputBorder.none,
-                              ),
-                              cursorColor: _accentColor,
                             ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _textController,
+                          focusNode: _focusNode,
+                          maxLines: null,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: _darkText,
+                            height: 1.5,
+                          ),
+                          decoration: InputDecoration(
+                            hintText:
+                                'Как прошел ваш день? Что вы чувствуете? О чем думаете?\n\nЭти записи помогают обучать ваш Digital Twin и улучшать рекомендации AI...',
+                            hintStyle: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 15,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          cursorColor: _accentColor,
+                          onSubmitted: (_) => _saveEntry(),
+                        ),
+                      ],
+                    ),
+                  ),
 
-                      // Сохраненные записи
-                      if (_entries.isNotEmpty) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text(
+                  // Сохраненные записи
+                  if (hasEntries) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
                             'Previous Entries',
                             style: TextStyle(
                               fontSize: 18,
@@ -186,134 +313,228 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
                               color: _darkText,
                             ),
                           ),
-                        ),
-                        ..._entries.map((entry) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: Colors.grey.withValues(alpha: 0.1),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withValues(alpha: 0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                          Text(
+                            '${reflections.length} записей',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 13,
                             ),
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.circle,
-                                      size: 8,
-                                      color: _accentColor,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      DateFormat('MMM d, yyyy').format(
-                                        DateFormat(
-                                          'yyyy-MM-dd',
-                                        ).parse(entry['date']!),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...reflections.map((reflection) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.grey.withAlpha((0.1 * 255).toInt()),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withAlpha(
+                                (0.05 * 255).toInt(),
+                              ),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 8,
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: _accentColor,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            DateFormat(
+                                              'MMM d, yyyy • HH:mm',
+                                            ).format(reflection.date),
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 13,
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.more_vert,
+                                          size: 18,
+                                          color: Colors.grey[400],
+                                        ),
+                                        onPressed: () =>
+                                            _deleteEntry(reflection.id),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    reflection.text,
+                                    style: TextStyle(
+                                      color: _darkText,
+                                      fontSize: 15,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  if (reflection.emotion != null) ...[
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _accentColor.withAlpha(
+                                          (0.1 * 255).toInt(),
+                                        ),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'Настроение: ${reflection.emotion}',
+                                        style: TextStyle(
+                                          color: _accentColor,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  entry['text']!,
-                                  style: TextStyle(
-                                    color: _darkText,
-                                    fontSize: 15,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          );
-                        }),
-                      ] else ...[
-                        // Пустое состояние
-                        Container(
-                          margin: const EdgeInsets.only(top: 60),
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.edit_note_rounded,
-                                size: 64,
-                                color: Colors.grey[300],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No entries yet',
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Your first reflection will appear here',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
+                          ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 20),
+                  ] else ...[
+                    // Пустое состояние
+                    Container(
+                      margin: const EdgeInsets.only(top: 60),
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.edit_note_rounded,
+                            size: 64,
+                            color: Colors.grey[300],
                           ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-
-              // Кнопка сохранения
-              Container(
-                margin: const EdgeInsets.only(top: 16),
-                child: ElevatedButton(
-                  onPressed: _saveEntry,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accentColor,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.save_rounded, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Save Reflection',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Пока нет записей',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Ваша первая запись появится здесь\n\nНачните писать в поле выше или скажите AI-помощнику "сохрани в дневник"',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  ],
+                ],
               ),
-            ],
+            ),
           ),
+
+          // Кнопка сохранения
+          Container(
+            margin: const EdgeInsets.only(top: 16),
+            child: ElevatedButton(
+              onPressed: _saveEntry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accentColor,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.save_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Save Reflection',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoading() {
+    return const Center(child: CircularProgressIndicator());
+  }
+
+  Widget _buildError(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, color: Colors.red, size: 64),
+            const SizedBox(height: 16),
+            Text(
+              'Ошибка загрузки дневника',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                ref.read(dailyReflectionsProvider.notifier).refresh();
+              },
+              child: const Text('Попробовать снова'),
+            ),
+          ],
         ),
       ),
     );
