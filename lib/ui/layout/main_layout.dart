@@ -44,10 +44,7 @@ class _MainLayoutState extends State<MainLayout> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
-            label: 'Journey',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.timeline), label: 'Journey'),
           BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'AI'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],

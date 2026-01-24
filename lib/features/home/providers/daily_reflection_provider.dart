@@ -1,15 +1,24 @@
 // lib/features/home/providers/daily_reflection_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import '../models/daily_reflection_model.dart';
 import '../services/daily_reflection_repository.dart';
+import '../../../core/utils/logger_service.dart';
+import '../../../core/providers/auth_provider.dart';
 
-final dailyReflectionRepositoryProvider = Provider<DailyReflectionRepository>((
+// 2. Провайдер репозитория с зависимостью от пользователя
+final dailyReflectionRepositoryProvider = Provider<DailyReflectionRepository?>((
   ref,
 ) {
-  return DailyReflectionRepository();
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) {
+    Log.w('DailyReflectionRepository: User not authenticated');
+    return null;
+  }
+  return DailyReflectionRepository(userId: userId);
 });
 
-// Используем AsyncNotifierProvider вместо StateNotifierProvider
+// 3. Главный провайдер с проверкой авторизации
 final dailyReflectionsProvider =
     AsyncNotifierProvider<DailyReflectionsNotifier, List<DailyReflectionModel>>(
       DailyReflectionsNotifier.new,
@@ -17,33 +26,65 @@ final dailyReflectionsProvider =
 
 class DailyReflectionsNotifier
     extends AsyncNotifier<List<DailyReflectionModel>> {
-  DailyReflectionRepository get _repository =>
+  DailyReflectionRepository? get _repository =>
       ref.read(dailyReflectionRepositoryProvider);
 
   @override
   Future<List<DailyReflectionModel>> build() async {
-    return await _repository.getReflections();
+    final repository = _repository;
+    if (repository == null) {
+      Log.w(
+        'DailyReflectionsNotifier: Repository is null (user not authenticated)',
+      );
+      return []; // Пользователь не авторизован
+    }
+
+    try {
+      // Сначала синхронизируем локальные данные
+      await repository.syncLocalData();
+
+      // Затем загружаем данные
+      return await repository.getReflections();
+    } catch (e, stackTrace) {
+      Log.e('Error building reflections', error: e, stackTrace: stackTrace);
+      return [];
+    }
   }
 
   Future<void> addReflection(String text, {String? emotion}) async {
+    final repository = _repository;
+    if (repository == null) {
+      Log.w('Cannot add reflection: User not authenticated');
+      return;
+    }
+
     state = const AsyncValue.loading();
 
     try {
-      await _repository.saveReflectionFromText(text, emotion: emotion);
-      final reflections = await _repository.getReflections();
+      await repository.saveReflectionFromText(text, emotion: emotion);
+
+      // Обновляем состояние
+      final reflections = await repository.getReflections();
       state = AsyncValue.data(reflections);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
+      Log.e('Error adding reflection', error: e, stackTrace: stackTrace);
       rethrow;
     }
   }
 
   Future<void> addReflectionFromModel(DailyReflectionModel reflection) async {
+    final repository = _repository;
+    if (repository == null) {
+      Log.w('Cannot add reflection: User not authenticated');
+      return;
+    }
+
     state = const AsyncValue.loading();
 
     try {
-      await _repository.saveReflection(reflection);
-      final reflections = await _repository.getReflections();
+      await repository.saveReflection(reflection);
+      final reflections = await repository.getReflections();
       state = AsyncValue.data(reflections);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
@@ -52,11 +93,17 @@ class DailyReflectionsNotifier
   }
 
   Future<void> deleteReflection(String id) async {
+    final repository = _repository;
+    if (repository == null) {
+      Log.w('Cannot delete reflection: User not authenticated');
+      return;
+    }
+
     state = const AsyncValue.loading();
 
     try {
-      await _repository.deleteReflection(id);
-      final reflections = await _repository.getReflections();
+      await repository.deleteReflection(id);
+      final reflections = await repository.getReflections();
       state = AsyncValue.data(reflections);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
@@ -65,10 +112,16 @@ class DailyReflectionsNotifier
   }
 
   Future<void> deleteAllReflections() async {
+    final repository = _repository;
+    if (repository == null) {
+      Log.w('Cannot delete reflections: User not authenticated');
+      return;
+    }
+
     state = const AsyncValue.loading();
 
     try {
-      await _repository.deleteAllReflections();
+      await repository.deleteAllReflections();
       state = const AsyncValue.data([]);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
@@ -77,10 +130,40 @@ class DailyReflectionsNotifier
   }
 
   Future<void> refresh() async {
+    final repository = _repository;
+    if (repository == null) {
+      Log.w('Cannot refresh: User not authenticated');
+      state = const AsyncValue.data([]);
+      return;
+    }
+
     state = const AsyncValue.loading();
 
     try {
-      final reflections = await _repository.getReflections();
+      // Синхронизируем перед обновлением
+      await repository.syncLocalData();
+
+      final reflections = await repository.getReflections();
+      state = AsyncValue.data(reflections);
+    } catch (e, stackTrace) {
+      state = AsyncValue.error(e, stackTrace);
+      rethrow;
+    }
+  }
+
+  // Новый метод для синхронизации
+  Future<void> syncWithCloud() async {
+    final repository = _repository;
+    if (repository == null) {
+      Log.w('Cannot sync: User not authenticated');
+      return;
+    }
+
+    state = const AsyncValue.loading();
+
+    try {
+      await repository.syncLocalData();
+      final reflections = await repository.getReflections();
       state = AsyncValue.data(reflections);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
@@ -89,9 +172,10 @@ class DailyReflectionsNotifier
   }
 }
 
-// Вспомогательные провайдеры
+// 4. Вспомогательные провайдеры
 final hasReflectionTodayProvider = FutureProvider<bool>((ref) async {
   final repository = ref.read(dailyReflectionRepositoryProvider);
+  if (repository == null) return false;
   return await repository.hasReflectionToday();
 });
 
@@ -115,3 +199,6 @@ final formattedReflectionsProvider = Provider<List<DailyReflectionModel>>((
     error: (_, _) => [],
   );
 });
+
+// Провайдер статуса синхронизации
+final syncStatusProvider = StateProvider<bool>((ref) => false);

@@ -1,7 +1,7 @@
 // lib/core/constants/api_config.dart
 class ApiConfig {
   static const String openRouterApiKey = String.fromEnvironment(
-    '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',
+    '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',
     defaultValue: '', // В продакшене использовать .env
   );
 

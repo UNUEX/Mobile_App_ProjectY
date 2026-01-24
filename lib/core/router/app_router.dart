@@ -9,6 +9,8 @@ import '../../features/digital_twin/digital_twin_screen.dart';
 import '../../features/your_state/your_state_screen.dart';
 import '../../features/onboarding/welcome_questionnaire_screen.dart';
 import '../../features/auth/auth_screen.dart';
+import '../../features/journey/journey_screen.dart';
+import '../../features/journey/screens/life_simulation_screen.dart';
 
 class AppRouter {
   static const String onboarding = '/onboarding';
@@ -20,6 +22,10 @@ class AppRouter {
   static const String digitalTwin = '/digital-twin';
   static const String yourState = '/your-state';
   static const String auth = '/auth';
+
+  // Добавьте эти константы
+  static const String journey = '/journey';
+  static const String lifeSimulation = '/life-simulation';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -43,6 +49,13 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const YourStateScreen());
       case auth:
         return MaterialPageRoute(builder: (_) => const AuthScreen());
+
+      // Добавьте эти case
+      case journey:
+        return MaterialPageRoute(builder: (_) => const JourneyScreen());
+      case lifeSimulation:
+        return MaterialPageRoute(builder: (_) => const LifeSimulationScreen());
+
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
@@ -62,6 +75,15 @@ class AppRouter {
 
   static void goToAssistant(BuildContext context) {
     Navigator.pushNamed(context, assistant);
+  }
+
+  // Добавьте эти методы
+  static void goToJourney(BuildContext context) {
+    Navigator.pushNamed(context, journey);
+  }
+
+  static void goToLifeSimulation(BuildContext context) {
+    Navigator.pushNamed(context, lifeSimulation);
   }
 
   static void goBack(BuildContext context) {

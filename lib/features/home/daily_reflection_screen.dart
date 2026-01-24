@@ -112,9 +112,36 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
     );
   }
 
+  // Показать статус синхронизации
+  void _showSyncStatus(bool isSyncing) {
+    if (isSyncing) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text('Синхронизация с облаком...'),
+            ],
+          ),
+          backgroundColor: _accentColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final reflectionsAsync = ref.watch(dailyReflectionsProvider);
+    final syncStatus = ref.watch(syncStatusProvider);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -134,6 +161,27 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: Icon(
+              Icons.sync,
+              color: syncStatus ? _accentColor : _darkText,
+            ),
+            onPressed: () async {
+              if (!syncStatus) {
+                ref.read(syncStatusProvider.notifier).state = true;
+                _showSyncStatus(true);
+
+                try {
+                  await ref
+                      .read(dailyReflectionsProvider.notifier)
+                      .syncWithCloud();
+                } finally {
+                  ref.read(syncStatusProvider.notifier).state = false;
+                }
+              }
+            },
+            tooltip: 'Синхронизировать',
+          ),
           IconButton(
             icon: Icon(Icons.refresh, color: _darkText),
             onPressed: () {
@@ -155,6 +203,7 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
 
   Widget _buildContent(List<DailyReflectionModel> reflections) {
     final hasEntries = reflections.isNotEmpty;
+    final syncStatus = ref.watch(syncStatusProvider);
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -191,9 +240,28 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      'Последняя запись',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    Row(
+                      children: [
+                        if (syncStatus)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _accentColor,
+                              ),
+                            ),
+                          ),
+                        Text(
+                          'Последняя запись',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       hasEntries
@@ -458,6 +526,16 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
                               fontSize: 14,
                             ),
                           ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Ваши записи автоматически синхронизируются с облаком',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: _accentColor.withValues(alpha: .7),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -482,15 +560,26 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.save_rounded, size: 20),
-                  SizedBox(width: 8),
-                  Text(
+                  const Icon(Icons.save_rounded, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
                     'Save Reflection',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
+                  if (syncStatus) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -501,7 +590,16 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
   }
 
   Widget _buildLoading() {
-    return const Center(child: CircularProgressIndicator());
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Загрузка дневника...', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
   }
 
   Widget _buildError(String error) {
@@ -511,9 +609,9 @@ class _DailyReflectionScreenState extends ConsumerState<DailyReflectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, color: Colors.red, size: 64),
+            const Icon(Icons.error_outline, color: Colors.red, size: 64),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Ошибка загрузки дневника',
               style: TextStyle(
                 fontSize: 18,

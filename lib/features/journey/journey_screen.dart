@@ -1,64 +1,521 @@
+// lib/features/journey/screens/journey_screen.dart
 import 'package:flutter/material.dart';
-import 'dart:ui';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yauctor_ai/features/journey/models/life_simulation.dart';
+import 'package:yauctor_ai/features/journey/providers/life_simulation_provider.dart';
+import 'package:yauctor_ai/features/journey/screens/life_simulation_screen.dart';
+import 'package:yauctor_ai/ui/layout/main_layout.dart';
 
-class JourneyScreen extends StatelessWidget {
+class JourneyScreen extends ConsumerWidget {
   const JourneyScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final simulationsAsync = ref.watch(lifeSimulationsProvider);
+
+    // Проверяем, можем ли вернуться назад
+    final canPop = ModalRoute.of(context)?.canPop ?? false;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar.large(
-            backgroundColor: Colors.transparent,
-            expandedHeight: 160,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              title: const Text(
-                'Journey',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1,
-                  color: Color(0xFF1A1D29),
-                ),
+      backgroundColor: const Color(0xFF0B0F19),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0B0F19),
+        elevation: 0,
+        leading: canPop
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : IconButton(
+                icon: const Icon(Icons.home, color: Colors.white),
+                onPressed: () {
+                  // Если нельзя вернуться назад, идем на главную
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const MainLayout(), // или ваш главный экран
+                    ),
+                    (route) => false,
+                  );
+                },
               ),
-              titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
-              expandedTitleScale: 1.5,
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      const Color(0xFF6366F1).withValues(alpha: 0.05),
-                      const Color(0xFFA855F7).withValues(alpha: 0.05),
-                    ],
+        title: const Text(
+          'Мой путь',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: () => ref.refresh(lifeSimulationsProvider),
+            tooltip: 'Обновить',
+          ),
+        ],
+      ),
+      body: simulationsAsync.when(
+        data: (simulations) => _buildContent(context, simulations),
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+        ),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: Color(0xFFEF4444),
+                  size: 50,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Ошибка загрузки',
+                  style: TextStyle(
+                    color: const Color(0xFF94A3B8),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  style: const TextStyle(color: Color(0xFF94A3B8)),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => ref.refresh(lifeSimulationsProvider),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                  ),
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LifeSimulationScreen()),
+          );
+        },
+        backgroundColor: const Color(0xFF6366F1),
+        icon: const Icon(Icons.auto_awesome, color: Colors.white),
+        label: const Text(
+          'Новая симуляция',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, List<LifeSimulation> simulations) {
+    // Конвертируем симуляции в вехи
+    final milestones = _convertSimulationsToMilestones(simulations);
+
+    return Stack(
+      children: [
+        // Фоновый атмосферный градиент
+        Positioned(
+          top: -100,
+          right: -100,
+          child: Container(
+            width: 400,
+            height: 400,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  const Color(0xFF6366F1).withValues(alpha: .2),
+                  Colors.transparent,
+                ],
               ),
             ),
           ),
-          SliverToBoxAdapter(
+        ),
+
+        CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // Кинематографичный заголовок
+            SliverAppBar.large(
+              backgroundColor: const Color(0xFF0B0F19),
+              expandedHeight: 160,
+              pinned: true,
+              stretch: true,
+              elevation: 0,
+              flexibleSpace: FlexibleSpaceBar(
+                centerTitle: false,
+                titlePadding: const EdgeInsets.only(left: 24, bottom: 16),
+                expandedTitleScale: 1.2,
+                title: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Colors.white, Color(0xFF94A3B8)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ).createShader(bounds),
+                  child: const Text(
+                    'Ваша История',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                background: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            const Color(0xFF1E293B).withValues(alpha: 0.3),
+                            const Color(0xFF0B0F19),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 60,
+                      left: 24,
+                      child: Text(
+                        _getJourneySubtitle(simulations),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Список событий или пустое состояние
+            if (milestones.isEmpty)
+              SliverFillRemaining(child: _buildEmptyState(context))
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    return _CinematicTimelineItem(
+                      data: milestones[index],
+                      isFirst: index == 0,
+                    );
+                  }, childCount: milestones.length),
+                ),
+              ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _getJourneySubtitle(List<LifeSimulation> simulations) {
+    if (simulations.isEmpty) {
+      return 'НАЧНИТЕ СВОЙ ПУТЬ';
+    }
+
+    final daysSinceFirst = DateTime.now()
+        .difference(simulations.last.createdAt)
+        .inDays;
+
+    return 'ПУТЬ ДЛИНОЮ В $daysSinceFirst ${_getDaysWord(daysSinceFirst)}';
+  }
+
+  String _getDaysWord(int days) {
+    if (days % 10 == 1 && days % 100 != 11) return 'ДЕНЬ';
+    if ([2, 3, 4].contains(days % 10) && ![12, 13, 14].contains(days % 100)) {
+      return 'ДНЯ';
+    }
+    return 'ДНЕЙ';
+  }
+
+  List<_MilestoneData> _convertSimulationsToMilestones(
+    List<LifeSimulation> simulations,
+  ) {
+    return simulations.asMap().entries.map((entry) {
+      final index = entry.key;
+      final sim = entry.value;
+      final results = sim.results;
+
+      return _MilestoneData(
+        date: _formatDate(sim.createdAt),
+        title: sim.title,
+        description: _extractShortDescription(sim),
+        icon: _getIconForSimulation(sim),
+        isActive: index == 0,
+        isLast: index == simulations.length - 1,
+        score: results['totalScore'] as double,
+      );
+    }).toList();
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+
+    if (diff.inDays == 0) return 'СЕГОДНЯ';
+    if (diff.inDays == 1) return 'ВЧЕРА';
+    if (diff.inDays < 7) {
+      return '${diff.inDays} ${_getDaysWord(diff.inDays)} НАЗАД';
+    }
+
+    const months = [
+      '',
+      'ЯНВ',
+      'ФЕВ',
+      'МАР',
+      'АПР',
+      'МАЙ',
+      'ИЮН',
+      'ИЮЛ',
+      'АВГ',
+      'СЕН',
+      'ОКТ',
+      'НОЯ',
+      'ДЕК',
+    ];
+    return '${months[date.month]} ${date.year}';
+  }
+
+  String _extractShortDescription(LifeSimulation sim) {
+    final results = sim.results;
+    final readiness = results['readinessLevel'] as String;
+    final score = results['totalScore'] as double;
+    final scorePercent = (score * 100).toStringAsFixed(0);
+
+    return '$readiness. Общий балл: $scorePercent%';
+  }
+
+  IconData _getIconForSimulation(LifeSimulation sim) {
+    final score = sim.results['totalScore'] as double;
+
+    if (score >= 0.85) return Icons.auto_awesome;
+    if (score >= 0.7) return Icons.bolt_rounded;
+    if (score >= 0.5) return Icons.graphic_eq;
+    return Icons.flag_rounded;
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF6366F1).withValues(alpha: 0.2),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                size: 64,
+                color: Color(0xFF6366F1),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Начните свой путь',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Пройдите симуляцию жизни, чтобы\nувидеть свою историю развития',
+              style: TextStyle(
+                color: Color(0xFF94A3B8),
+                fontSize: 16,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const LifeSimulationScreen(),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.play_arrow, color: Colors.white),
+              label: const Text(
+                'Начать симуляцию',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Модель данных
+class _MilestoneData {
+  final String date;
+  final String title;
+  final String description;
+  final IconData icon;
+  final bool isActive;
+  final bool isLast;
+  final double score;
+
+  _MilestoneData({
+    required this.date,
+    required this.title,
+    required this.description,
+    required this.icon,
+    this.isActive = false,
+    this.isLast = false,
+    this.score = 0.0,
+  });
+}
+
+class _CinematicTimelineItem extends StatelessWidget {
+  final _MilestoneData data;
+  final bool isFirst;
+
+  const _CinematicTimelineItem({required this.data, required this.isFirst});
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Левая колонка: Дата + Линия
+          SizedBox(
+            width: 50,
+            child: Column(
+              children: [
+                _GlowingNode(isActive: data.isActive, icon: data.icon),
+                if (!data.isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            data.isActive
+                                ? const Color(0xFF6366F1)
+                                : const Color(0xFF334155),
+                            data.isActive
+                                ? const Color(0xFF6366F1).withValues(alpha: 0.1)
+                                : const Color(
+                                    0xFF334155,
+                                  ).withValues(alpha: 0.1),
+                          ],
+                        ),
+                        boxShadow: data.isActive
+                            ? [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF6366F1,
+                                  ).withValues(alpha: 0.5),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : [],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 20),
+
+          // Правая колонка: Контент
+          Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+              padding: const EdgeInsets.only(bottom: 48, top: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _GlassmorphicBanner(),
-                  const SizedBox(height: 24),
-                  _CurrentPhaseCard(),
-                  const SizedBox(height: 40),
-                  _SectionHeader(title: 'Your Timeline'),
-                  const SizedBox(height: 20),
-                  _ModernTimeline(),
-                  const SizedBox(height: 40),
-                  _SectionHeader(
-                    title: 'Future Scenarios',
-                    subtitle: 'AI-Powered Predictions',
+                  Text(
+                    data.date,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: data.isActive
+                          ? const Color(0xFF818CF8)
+                          : const Color(0xFF64748B),
+                    ),
                   ),
-                  const SizedBox(height: 20),
-                  _ScenarioCards(),
+                  const SizedBox(height: 8),
+                  Text(
+                    data.title,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: data.isActive
+                          ? Colors.white
+                          : const Color(0xFFE2E8F0),
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    data.description,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      height: 1.6,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                  if (data.score > 0) ...[
+                    const SizedBox(height: 12),
+                    _ScoreIndicator(score: data.score),
+                  ],
                 ],
               ),
             ),
@@ -69,173 +526,68 @@ class JourneyScreen extends StatelessWidget {
   }
 }
 
-class _GlassmorphicBanner extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.8),
-                Colors.white.withValues(alpha: 0.4),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.5),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.explore_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 18),
-              const Expanded(
-                child: Text(
-                  'Where am I going?',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1D29),
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+class _GlowingNode extends StatelessWidget {
+  final bool isActive;
+  final IconData icon;
 
-class _CurrentPhaseCard extends StatelessWidget {
+  const _GlowingNode({required this.isActive, required this.icon});
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(28),
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        color: const Color(0xFF0B0F19),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isActive ? const Color(0xFF6366F1) : const Color(0xFF334155),
+          width: 2,
         ),
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-            blurRadius: 40,
-            offset: const Offset(0, 20),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _PulsingDot(),
-              const SizedBox(width: 12),
-              Text(
-                'CURRENT PHASE',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white.withValues(alpha: 0.8),
-                  letterSpacing: 1.5,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Growth Mode',
-            style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: -1,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _GlassMetricChip(
-                icon: Icons.trending_up_rounded,
-                label: 'Productivity',
-                value: '+23%',
-              ),
-              _GlassMetricChip(
-                icon: Icons.battery_charging_full_rounded,
-                label: 'Energy',
-                value: 'Stable',
-              ),
-              _GlassMetricChip(
-                icon: Icons.center_focus_strong_rounded,
-                label: 'Focus',
-                value: 'Rising',
-              ),
-            ],
-          ),
-        ],
+              ]
+            : [],
+      ),
+      child: Center(
+        child: isActive
+            ? _PulsingIcon(icon: icon)
+            : Icon(icon, size: 18, color: const Color(0xFF475569)),
       ),
     );
   }
 }
 
-class _PulsingDot extends StatefulWidget {
+class _PulsingIcon extends StatefulWidget {
+  final IconData icon;
+  const _PulsingIcon({required this.icon});
+
   @override
-  State<_PulsingDot> createState() => _PulsingDotState();
+  State<_PulsingIcon> createState() => _PulsingIconState();
 }
 
-class _PulsingDotState extends State<_PulsingDot>
+class _PulsingIconState extends State<_PulsingIcon>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat();
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _animation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -247,571 +599,53 @@ class _PulsingDotState extends State<_PulsingDot>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _controller,
+      animation: _animation,
       builder: (context, child) {
-        return Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withValues(
-                  alpha: 0.8 * (1 - _controller.value),
-                ),
-                blurRadius: 16 * _controller.value,
-                spreadRadius: 6 * _controller.value,
-              ),
-            ],
-          ),
+        return Icon(
+          widget.icon,
+          size: 18,
+          color: const Color(0xFF6366F1).withValues(alpha: _animation.value),
         );
       },
     );
   }
 }
 
-class _GlassMetricChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
+class _ScoreIndicator extends StatelessWidget {
+  final double score;
 
-  const _GlassMetricChip({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+  const _ScoreIndicator({required this.score});
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(16),
+            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.3),
-              width: 1,
+              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: Colors.white),
-              const SizedBox(width: 8),
+              Icon(Icons.star, size: 14, color: const Color(0xFF6366F1)),
+              const SizedBox(width: 4),
               Text(
-                '$label ',
+                '${(score * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF818CF8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-
-  const _SectionHeader({required this.title, this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF1A1D29),
-            letterSpacing: -0.8,
-          ),
-        ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(
-                Icons.auto_awesome_rounded,
-                size: 16,
-                color: const Color(0xFF6366F1).withValues(alpha: 0.8),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                subtitle!,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: const Color(0xFF64748B).withValues(alpha: 0.9),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _ModernTimeline extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _TimelineItem(
-          date: 'Jan 2026',
-          title: 'Turning Point',
-          description: 'New focus. Priority shift. Major decisions ahead.',
-          icon: Icons.fork_right_rounded,
-          colors: [Color(0xFF8B5CF6), Color(0xFFA855F7)],
-          isLatest: true,
-        ),
-        _TimelineItem(
-          date: 'Dec 2025',
-          title: 'Growth Phase',
-          description: 'Productivity breakthrough. Habits solidified.',
-          icon: Icons.rocket_launch_rounded,
-          colors: [Color(0xFF10B981), Color(0xFF14B8A6)],
-        ),
-        _TimelineItem(
-          date: 'Nov 2025',
-          title: 'Plateau',
-          description: 'Energy dip. Time for strategy revision.',
-          icon: Icons.timeline_rounded,
-          colors: [Color(0xFFF59E0B), Color(0xFFF97316)],
-        ),
-        _TimelineItem(
-          date: 'Oct 2025',
-          title: 'Decision Made',
-          description: 'Morning routine established. Journey begins.',
-          icon: Icons.lightbulb_rounded,
-          colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
-          isLast: true,
         ),
       ],
-    );
-  }
-}
-
-class _TimelineItem extends StatelessWidget {
-  final String date;
-  final String title;
-  final String description;
-  final IconData icon;
-  final List<Color> colors;
-  final bool isLatest;
-  final bool isLast;
-
-  const _TimelineItem({
-    required this.date,
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.colors,
-    this.isLatest = false,
-    this.isLast = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 64,
-            child: Column(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: colors,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colors[0].withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 28),
-                ),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 3,
-                      margin: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            colors[0].withValues(alpha: 0.4),
-                            colors[0].withValues(alpha: 0.1),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 24),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: isLatest
-                            ? [
-                                Colors.white.withValues(alpha: 0.95),
-                                Colors.white.withValues(alpha: 0.8),
-                              ]
-                            : [
-                                Colors.white.withValues(alpha: 0.7),
-                                Colors.white.withValues(alpha: 0.5),
-                              ],
-                      ),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: isLatest
-                            ? colors[0].withValues(alpha: 0.3)
-                            : Colors.white.withValues(alpha: 0.6),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isLatest
-                              ? colors[0].withValues(alpha: 0.15)
-                              : const Color(0xFF64748B).withValues(alpha: 0.08),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: colors),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            date.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1A1D29),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          description,
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.5,
-                            color: const Color(
-                              0xFF475569,
-                            ).withValues(alpha: 0.9),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScenarioCards extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _ScenarioCard(
-          title: 'Optimistic',
-          timeline: '3 months ahead',
-          metrics: [
-            'Productivity surge +45%',
-            'New skills fully mastered',
-            'Peak energy sustained',
-          ],
-          probability: 72,
-          colors: [Color(0xFF10B981), Color(0xFF14B8A6)],
-          isRecommended: false,
-        ),
-        const SizedBox(height: 16),
-        _ScenarioCard(
-          title: 'Most Likely',
-          timeline: '3 months ahead',
-          metrics: [
-            'Steady productivity +30%',
-            'Consistent growth trajectory',
-            'Minor challenges overcome',
-          ],
-          probability: 85,
-          colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
-          isRecommended: true,
-        ),
-        const SizedBox(height: 16),
-        _ScenarioCard(
-          title: 'If You Slow Down',
-          timeline: '3 months ahead',
-          metrics: [
-            'Gradual pattern regression',
-            'Momentum significantly lost',
-            'Major restart required',
-          ],
-          probability: 24,
-          colors: [Color(0xFFF59E0B), Color(0xFFF97316)],
-          isRecommended: false,
-        ),
-      ],
-    );
-  }
-}
-
-class _ScenarioCard extends StatelessWidget {
-  final String title;
-  final String timeline;
-  final List<String> metrics;
-  final int probability;
-  final List<Color> colors;
-  final bool isRecommended;
-
-  const _ScenarioCard({
-    required this.title,
-    required this.timeline,
-    required this.metrics,
-    required this.probability,
-    required this.colors,
-    required this.isRecommended,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.9),
-                Colors.white.withValues(alpha: 0.7),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(
-              color: isRecommended
-                  ? colors[0].withValues(alpha: 0.4)
-                  : Colors.white.withValues(alpha: 0.6),
-              width: 2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colors[0].withValues(alpha: 0.15),
-                blurRadius: 30,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                title,
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: colors[0],
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                            ),
-                            if (isRecommended) ...[
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(colors: colors),
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: colors[0].withValues(alpha: 0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Text(
-                                  'BEST',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w900,
-                                    color: Colors.white,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          timeline,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: const Color(
-                              0xFF64748B,
-                            ).withValues(alpha: 0.8),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: colors,
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: colors[0].withValues(alpha: 0.4),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      '$probability%',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              ...metrics.map(
-                (metric) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(top: 7),
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: colors),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Text(
-                          metric,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: Color(0xFF334155),
-                            height: 1.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
