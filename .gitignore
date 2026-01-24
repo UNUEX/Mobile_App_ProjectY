@@ -65,3 +65,9 @@ ios/Flutter/flutter_export_environment.sh
 Thumbs.db
 
 .metadata
+
+# Environment variables
+.env
+.env.*
+assets/.env
+assets/.env.*
