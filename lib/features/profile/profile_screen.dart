@@ -272,16 +272,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // Все остальные методы остаются без изменений...
-  // _buildModernAppBar, _buildProfileHeader, _buildDefaultAvatar,
-  // _buildAuthPrompt, _buildActivitiesSection, _buildActivityItem,
-  // _buildDigitalTwinCard, _buildQuickActions, _buildActionCard,
-  // _buildSettingsSection, _buildSettingTile, _buildActionButton,
-  // _buildFooter
-
   Widget _buildModernAppBar() {
     return SliverAppBar(
-      expandedHeight: 100, // Уменьшил с 200 до 120
+      expandedHeight: 140, // Увеличил высоту для размещения всех элементов
       pinned: true,
       backgroundColor: Colors.white,
       elevation: 0,
@@ -298,48 +291,217 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ],
             ),
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                top:
-                    MediaQuery.of(context).padding.top +
-                    10, // Учитываем статус бар
-                left: 20,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.menu,
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Last 7 days',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 20,
+              left: 20,
+              right: 20,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Левая часть: меню и статистика
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          // Действие при нажатии на меню
+                          debugPrint('Menu tapped');
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.menu,
+                                color: Colors.white.withValues(alpha: 0.9),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Last 7 days',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Дополнительные элементы слева
+                      InkWell(
+                        onTap: () {
+                          debugPrint('Left action tapped');
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Icon(
+                            Icons.trending_up,
+                            color: Colors.white.withValues(alpha: 0.8),
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Центральная часть: иконка профиля
+                InkWell(
+                  onTap: _navigateToProfileEdit,
+                  borderRadius: BorderRadius.circular(40),
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        width: 2,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 10,
-                right: 20,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
+                    child: ClipOval(
+                      child: _avatarUrl != null
+                          ? Image.network(
+                              _avatarUrl!,
+                              fit: BoxFit.cover,
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Center(
+                                      child: CircularProgressIndicator(
+                                        value:
+                                            loadingProgress
+                                                    .expectedTotalBytes !=
+                                                null
+                                            ? loadingProgress
+                                                      .cumulativeBytesLoaded /
+                                                  loadingProgress
+                                                      .expectedTotalBytes!
+                                            : null,
+                                        color: Colors.white,
+                                      ),
+                                    );
+                                  },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: _primaryPurple.withValues(alpha: 0.7),
+                                  child: Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 36,
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              color: _primaryPurple.withValues(alpha: 0.7),
+                              child: Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 36,
+                              ),
+                            ),
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.notifications_outlined,
-                    color: Colors.white,
-                    size: 22,
+                ),
+
+                // Правая часть: уведомления и другие элементы
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          // Действие при нажатии на уведомления
+                          debugPrint('Notifications tapped');
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Stack(
+                            children: [
+                              Icon(
+                                Icons.notifications_outlined,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Дополнительные элементы справа
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          InkWell(
+                            onTap: () {
+                              debugPrint('Settings tapped');
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                              child: Icon(
+                                Icons.settings,
+                                color: Colors.white.withValues(alpha: 0.8),
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              debugPrint('Search tapped');
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                              child: Icon(
+                                Icons.search,
+                                color: Colors.white.withValues(alpha: 0.8),
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -348,97 +510,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _buildProfileHeader() {
     return Transform.translate(
-      offset: const Offset(0, 0),
+      offset: const Offset(0, 20),
       child: Column(
         children: [
-          GestureDetector(
-            onTap: _navigateToProfileEdit,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 140,
-                  height: 140,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        _primaryPurple.withValues(alpha: 0.3),
-                        _pinkAccent.withValues(alpha: 0.3),
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _primaryPurple.withValues(alpha: 0.3),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 130,
-                  height: 130,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  child: ClipOval(
-                    child: _avatarUrl != null
-                        ? Image.network(
-                            _avatarUrl!,
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: CircularProgressIndicator(
-                                  value:
-                                      loadingProgress.expectedTotalBytes != null
-                                      ? loadingProgress.cumulativeBytesLoaded /
-                                            loadingProgress.expectedTotalBytes!
-                                      : null,
-                                  color: _primaryPurple,
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return _buildDefaultAvatar();
-                            },
-                          )
-                        : _buildDefaultAvatar(),
-                  ),
-                ),
-                if (_isLoggedIn)
-                  Positioned(
-                    bottom: 5,
-                    right: 5,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [_primaryPurple, _pinkAccent],
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: _primaryPurple.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.edit,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20), // Отступ от AppBar
           Text(
             _userName,
             style: const TextStyle(
@@ -481,24 +556,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDefaultAvatar() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            _primaryPurple.withValues(alpha: 0.8),
-            _pinkAccent.withValues(alpha: 0.8),
-          ],
-        ),
-      ),
-      child: Icon(
-        _isLoggedIn ? Icons.person : Icons.person_outline,
-        size: 60,
-        color: Colors.white,
       ),
     );
   }
@@ -1037,7 +1094,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ? []
             : [
                 BoxShadow(
-                  color: _primaryPurple.withValues(alpha: .3),
+                  color: _primaryPurple.withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
