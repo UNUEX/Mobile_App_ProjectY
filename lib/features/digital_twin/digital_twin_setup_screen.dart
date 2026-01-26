@@ -55,7 +55,7 @@ class _DigitalTwinSetupScreenState extends State<DigitalTwinSetupScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Digital Twin Setup",
+          "Avatar Setup",
           style: TextStyle(color: Colors.white),
         ),
         centerTitle: true,

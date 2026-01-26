@@ -78,7 +78,7 @@ class _DigitalTwinAvatarScreenState extends State<DigitalTwinAvatarScreen>
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                       ),
                       const Text(
-                        'Digital Twin',
+                        'Avatar',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 20,

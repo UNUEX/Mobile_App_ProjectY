@@ -129,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              "Alex",
+              "Alem",
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
@@ -340,7 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      "Train your Digital Twin",
+                      "Train your Avatar",
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -452,7 +452,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               flex: 3,
               child: _buildBentoCard(
-                title: "Digital Twin",
+                title: "Avatar",
                 subtitle: "Analysis",
                 icon: Icons.fingerprint,
                 color1: const Color(0xFF6366F1),

@@ -835,7 +835,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Digital Twin',
+                        'Avatar',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
