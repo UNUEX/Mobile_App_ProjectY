@@ -1,0 +1,333 @@
+// lib/features/journey/services/branch_repository.dart
+// ignore_for_file: avoid_print, unused_field
+
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../models/branch_structure.dart';
+import '../../../core/utils/logger_service.dart';
+
+class BranchRepository {
+  final String userId;
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final Uuid _uuid = const Uuid();
+
+  BranchRepository({required this.userId});
+
+  // Сохранение ветки (ИСПРАВЛЕНО)
+  Future<void> saveBranch(BranchStructure branch) async {
+    try {
+      final data = {
+        'id': branch.id,
+        'user_id': branch.userId,
+        'branch_id': branch.branchId,
+        'parent_branch_id': branch.parentBranchId,
+        'column': branch.column,
+        'row': branch.row,
+        'is_vertical': branch.isVertical,
+        'direction': branch.direction,
+        'simulation_ids': branch.simulationIds,
+        'created_at': branch.createdAt.toIso8601String(),
+        'updated_at': branch.updatedAt.toIso8601String(),
+      };
+
+      print('DEBUG: Saving branch to database: ${branch.branchId}');
+      print('DEBUG: Branch data: $data');
+
+      try {
+        await _supabase.from('branches').upsert(data);
+        Log.i('Branch saved: ${branch.branchId}');
+      } catch (e) {
+        // Если upsert возвращает ошибку, пробуем insert
+        Log.w('Upsert failed, trying insert: $e');
+        await _supabase.from('branches').insert(data);
+        Log.i('Branch inserted: ${branch.branchId}');
+      }
+    } catch (e, stackTrace) {
+      Log.e('Error saving branch', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  // Получение всех веток пользователя (ИСПРАВЛЕНО)
+  Future<List<BranchStructure>> getBranches() async {
+    try {
+      print('DEBUG: Fetching branches for user: $userId');
+
+      List<dynamic> response;
+      try {
+        response = await _supabase
+            .from('branches')
+            .select()
+            .eq('user_id', userId)
+            .order('created_at', ascending: true);
+      } catch (e) {
+        Log.e('Supabase query error', error: e);
+        return [];
+      }
+
+      final branches = <BranchStructure>[];
+
+      for (final item in response) {
+        try {
+          final branch = BranchStructure.fromJson(item);
+          branches.add(branch);
+        } catch (e) {
+          Log.e('Error parsing branch: $e\nItem: $item');
+        }
+      }
+
+      print('DEBUG: Found ${branches.length} branches');
+      return branches;
+    } catch (e, stackTrace) {
+      Log.e('Error fetching branches', error: e, stackTrace: stackTrace);
+      return [];
+    }
+  }
+
+  // Получение ветки по ID
+  Future<BranchStructure?> getBranchById(String branchId) async {
+    try {
+      final response = await _supabase
+          .from('branches')
+          .select()
+          .eq('user_id', userId)
+          .eq('branch_id', branchId)
+          .maybeSingle();
+
+      if (response != null) {
+        return BranchStructure.fromJson(response);
+      }
+      return null;
+    } catch (e, stackTrace) {
+      Log.e('Error fetching branch by ID', error: e, stackTrace: stackTrace);
+      return null;
+    }
+  }
+
+  // Обновление списка симуляций в ветке
+  Future<void> updateBranchSimulations(
+    String branchId,
+    List<String> simulationIds,
+  ) async {
+    try {
+      await _supabase
+          .from('branches')
+          .update({
+            'simulation_ids': simulationIds,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', userId)
+          .eq('branch_id', branchId);
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error updating branch simulations',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  // Удаление ветки
+  Future<void> deleteBranch(String branchId) async {
+    try {
+      await _supabase
+          .from('branches')
+          .delete()
+          .eq('user_id', userId)
+          .eq('branch_id', branchId);
+      Log.i('Branch deleted: $branchId');
+    } catch (e, stackTrace) {
+      Log.e('Error deleting branch', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  // Удаление всех веток пользователя
+  Future<void> deleteAllBranches() async {
+    try {
+      await _supabase.from('branches').delete().eq('user_id', userId);
+      Log.i('All branches deleted for user: $userId');
+    } catch (e, stackTrace) {
+      Log.e('Error deleting all branches', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  // Получение максимального значения column
+  Future<int> getMaxColumn() async {
+    try {
+      final response = await _supabase
+          .from('branches')
+          .select('column')
+          .eq('user_id', userId)
+          .order('column', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (response != null) {
+        final columnValue = response['column'];
+        if (columnValue != null) {
+          return (columnValue as num).toInt();
+        }
+      }
+      return 0;
+    } catch (e, stackTrace) {
+      Log.e('Error getting max column', error: e, stackTrace: stackTrace);
+      return 0;
+    }
+  }
+
+  // Проверка существования ветки
+  Future<bool> branchExists(String branchId) async {
+    try {
+      final response = await _supabase
+          .from('branches')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('branch_id', branchId)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error checking if branch exists',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  // Получить все симуляции, которые уже находятся в ветках
+  Future<Set<String>> getAllSimulationIdsInBranches() async {
+    try {
+      final response = await _supabase
+          .from('branches')
+          .select('simulation_ids')
+          .eq('user_id', userId);
+
+      final allSimulationIds = <String>{};
+
+      for (final item in response) {
+        final simulationIds = List<String>.from(item['simulation_ids'] ?? []);
+        allSimulationIds.addAll(simulationIds);
+      }
+
+      return allSimulationIds;
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error getting all simulation ids in branches',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return {};
+    }
+  }
+
+  // Получить симуляции без веток
+  Future<List<String>> getOrphanedSimulationIds(
+    List<String> allSimulationIds,
+  ) async {
+    try {
+      final simulationIdsInBranches = await getAllSimulationIdsInBranches();
+      return allSimulationIds
+          .where((id) => !simulationIdsInBranches.contains(id))
+          .toList();
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error getting orphaned simulation ids',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return [];
+    }
+  }
+
+  // Проверить, существует ли ветка с определенным branchId
+  Future<bool> branchExistsByBranchId(String branchId) async {
+    try {
+      final response = await _supabase
+          .from('branches')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('branch_id', branchId)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error checking if branch exists by branchId',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  // Получить ветку по branchId с проверкой
+  Future<BranchStructure?> getBranchByBranchId(String branchId) async {
+    try {
+      final response = await _supabase
+          .from('branches')
+          .select()
+          .eq('user_id', userId)
+          .eq('branch_id', branchId)
+          .maybeSingle();
+
+      if (response != null) {
+        return BranchStructure.fromJson(response);
+      }
+      return null;
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error fetching branch by branchId',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
+  }
+
+  // Обновить позицию ветки
+  Future<void> updateBranchPosition(
+    String branchId,
+    int column,
+    int row,
+  ) async {
+    try {
+      await _supabase
+          .from('branches')
+          .update({
+            'column': column,
+            'row': row,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', userId)
+          .eq('branch_id', branchId);
+    } catch (e, stackTrace) {
+      Log.e('Error updating branch position', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  // Удалить все ветки для определенных simulationIds
+  Future<void> deleteBranchesForSimulations(List<String> simulationIds) async {
+    try {
+      for (final simulationId in simulationIds) {
+        await _supabase
+            .from('branches')
+            .delete()
+            .eq('user_id', userId)
+            .contains('simulation_ids', [simulationId]);
+      }
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error deleting branches for simulations',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+}

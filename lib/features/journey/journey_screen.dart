@@ -1,20 +1,433 @@
-// lib/features/journey/screens/journey_screen.dart
+// lib/features/journey/journey_screen.dart
+// ignore_for_file: unused_local_variable, unused_result, deprecated_member_use, library_prefixes, avoid_print, unused_import
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
+import 'package:yauctor_ai/core/providers/auth_provider.dart';
+import 'package:yauctor_ai/features/journey/models/branch_structure.dart';
+import 'package:yauctor_ai/features/journey/services/branch_repository.dart';
 import 'package:yauctor_ai/features/journey/models/life_simulation.dart';
 import 'package:yauctor_ai/features/journey/providers/life_simulation_provider.dart';
 import 'package:yauctor_ai/features/journey/screens/life_simulation_screen.dart';
+import 'package:yauctor_ai/features/journey/widgets/journey_widgets.dart'
+    as JourneyWidgets;
 import 'package:yauctor_ai/ui/layout/main_layout.dart';
+import 'package:yauctor_ai/features/journey/widgets/journey_widgets.dart';
+import 'package:yauctor_ai/features/journey/widgets/journey_helpers.dart';
+import 'package:yauctor_ai/features/journey/widgets/journey_models.dart';
 
-class JourneyScreen extends ConsumerWidget {
+class JourneyScreen extends ConsumerStatefulWidget {
   const JourneyScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final simulationsAsync = ref.watch(lifeSimulationsProvider);
+  ConsumerState<JourneyScreen> createState() => _JourneyScreenState();
+}
 
-    // Проверяем, можем ли вернуться назад
+class _JourneyScreenState extends ConsumerState<JourneyScreen>
+    with TickerProviderStateMixin {
+  final TransformationController _transformationController =
+      TransformationController();
+  late AnimationController _loadingController;
+
+  List<Branch> _branches = [];
+  int _nextBranchColumn = 1;
+  bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+
+  // Метод для обновления состояния
+  void _updateBranches(List<Branch> branches, int nextBranchColumn) {
+    print('DEBUG: Updating state with ${branches.length} branches');
+    if (mounted) {
+      setState(() {
+        _branches = branches;
+        _nextBranchColumn = nextBranchColumn;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadingController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resetView();
+      _loadAllData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    _loadingController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAllData() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
+    });
+
+    try {
+      final simulations = await ref.read(lifeSimulationsProvider.future);
+      await _loadBranchesFromDatabase(simulations);
+    } catch (e, stackTrace) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = e.toString();
+        });
+      }
+      debugPrint('Error loading journey data: $e\n$stackTrace');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  // Загрузка веток из базы данных
+  Future<void> _loadBranchesFromDatabase(
+    List<LifeSimulation> simulations,
+  ) async {
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'User not authenticated';
+      });
+      return;
+    }
+
+    try {
+      print('DEBUG: Loading branches for user: $userId');
+      print('DEBUG: Total simulations: ${simulations.length}');
+
+      await JourneyHelpers.loadBranchesFromDatabase(
+        userId,
+        simulations,
+        _updateBranches,
+      );
+
+      print('DEBUG: Branches loaded: ${_branches.length}');
+    } catch (e, stackTrace) {
+      debugPrint('Error loading branches: $e\n$stackTrace');
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Failed to load branches';
+      });
+    }
+  }
+
+  // УДАЛЕН НЕНУЖНЫЙ МЕТОД _loadSavedBranches
+
+  void _resetView() {
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      _transformationController.value = Matrix4.identity()
+        ..translate(screenWidth / 2 - 500, 100.0);
+    });
+  }
+
+  void _refreshData() {
+    ref.refresh(lifeSimulationsProvider);
+    _loadAllData();
+  }
+
+  // Методы удаления (без изменений)
+  Future<void> _deleteSimulation(String simulationId) async {
+    try {
+      await ref
+          .read(lifeSimulationsProvider.notifier)
+          .deleteSimulation(simulationId);
+
+      setState(() {
+        for (final branch in _branches) {
+          branch.milestones.removeWhere((m) => m.id == simulationId);
+        }
+        _branches.removeWhere((branch) => branch.milestones.isEmpty);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка удаления: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteBranch(Branch branch) async {
+    try {
+      for (final milestone in branch.milestones) {
+        await ref
+            .read(lifeSimulationsProvider.notifier)
+            .deleteSimulation(milestone.id);
+      }
+
+      final userId = ref.read(currentUserIdProvider);
+      if (userId != null) {
+        await JourneyHelpers.deleteBranchFromDatabase(userId, branch.id);
+      }
+
+      setState(() {
+        _branches.remove(branch);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка удаления ветки: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteNode(Branch branch, int nodeIndex) async {
+    try {
+      final milestone = branch.milestones[nodeIndex];
+
+      await ref
+          .read(lifeSimulationsProvider.notifier)
+          .deleteSimulation(milestone.id);
+
+      setState(() {
+        branch.milestones.removeAt(nodeIndex);
+      });
+
+      final userId = ref.read(currentUserIdProvider);
+      if (userId != null) {
+        if (branch.milestones.isEmpty) {
+          await JourneyHelpers.deleteBranchFromDatabase(userId, branch.id);
+          _branches.remove(branch);
+        } else {
+          await JourneyHelpers.updateBranchInDatabase(userId, branch);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка удаления узла: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
+  // Методы создания веток (без изменений)
+  Future<void> _createNewMainBranchSimulation() async {
+    final result = await Navigator.of(context).push<LifeSimulation>(
+      MaterialPageRoute(builder: (_) => const LifeSimulationScreen()),
+    );
+
+    if (result != null && mounted) {
+      final userId = ref.read(currentUserIdProvider);
+      if (userId == null) return;
+
+      final newBranch = Branch(
+        id: const Uuid().v4(),
+        column: _nextBranchColumn,
+        row: 0,
+        milestones: [JourneyHelpers.convertSimulationToMilestone(result)],
+        isVertical: true,
+        direction: BranchDirection.none,
+      );
+
+      await JourneyHelpers.saveBranchToDatabase(
+        userId,
+        BranchStructure(
+          userId: userId,
+          branchId: newBranch.id,
+          column: newBranch.column,
+          row: newBranch.row,
+          isVertical: newBranch.isVertical,
+          direction: newBranch.direction.name,
+          simulationIds: newBranch.milestones.map((m) => m.id).toList(),
+        ),
+      );
+
+      setState(() {
+        _branches.add(newBranch);
+        _nextBranchColumn++;
+      });
+
+      ref.refresh(lifeSimulationsProvider);
+    }
+  }
+
+  Future<void> _continueVerticalBranch(Branch branch) async {
+    final result = await Navigator.of(context).push<LifeSimulation>(
+      MaterialPageRoute(builder: (_) => const LifeSimulationScreen()),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        branch.milestones.add(
+          JourneyHelpers.convertSimulationToMilestone(result),
+        );
+      });
+
+      final userId = ref.read(currentUserIdProvider);
+      if (userId != null) {
+        await JourneyHelpers.updateBranchInDatabase(userId, branch);
+      }
+
+      ref.refresh(lifeSimulationsProvider);
+    }
+  }
+
+  Future<void> _createBranchFromMilestone(
+    Branch parentBranch,
+    int milestoneIndex, {
+    required BranchDirection direction,
+  }) async {
+    print(
+      'DEBUG: Creating branch from milestone $milestoneIndex, direction: $direction',
+    );
+
+    final result = await Navigator.of(context).push<LifeSimulation>(
+      MaterialPageRoute(builder: (_) => const LifeSimulationScreen()),
+    );
+
+    if (result != null && mounted) {
+      final userId = ref.read(currentUserIdProvider);
+      if (userId == null) return;
+
+      final newBranch = Branch(
+        id: const Uuid().v4(),
+        column:
+            parentBranch.column + (direction == BranchDirection.left ? -1 : 1),
+        row: milestoneIndex,
+        milestones: [JourneyHelpers.convertSimulationToMilestone(result)],
+        parentBranch: parentBranch,
+        parentMilestoneIndex: milestoneIndex,
+        isVertical: false,
+        direction: direction,
+      );
+
+      await JourneyHelpers.saveBranchToDatabase(
+        userId,
+        BranchStructure(
+          userId: userId,
+          branchId: newBranch.id,
+          parentBranchId: parentBranch.id,
+          column: newBranch.column,
+          row: newBranch.row,
+          isVertical: newBranch.isVertical,
+          direction: newBranch.direction.name,
+          simulationIds: newBranch.milestones.map((m) => m.id).toList(),
+        ),
+      );
+
+      setState(() {
+        _branches.add(newBranch);
+      });
+
+      ref.refresh(lifeSimulationsProvider);
+    }
+  }
+
+  Future<void> _continueHorizontalBranch(Branch branch) async {
+    final result = await Navigator.of(context).push<LifeSimulation>(
+      MaterialPageRoute(builder: (_) => const LifeSimulationScreen()),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        branch.milestones.add(
+          JourneyHelpers.convertSimulationToMilestone(result),
+        );
+      });
+
+      final userId = ref.read(currentUserIdProvider);
+      if (userId != null) {
+        await JourneyHelpers.updateBranchInDatabase(userId, branch);
+      }
+
+      ref.refresh(lifeSimulationsProvider);
+    }
+  }
+
+  Future<void> _continueMainBranch(Branch branch) async {
+    final result = await Navigator.of(context).push<LifeSimulation>(
+      MaterialPageRoute(builder: (_) => const LifeSimulationScreen()),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        branch.milestones.add(
+          JourneyHelpers.convertSimulationToMilestone(result),
+        );
+      });
+
+      final userId = ref.read(currentUserIdProvider);
+      if (userId != null) {
+        await JourneyHelpers.updateBranchInDatabase(userId, branch);
+      }
+
+      ref.refresh(lifeSimulationsProvider);
+    }
+  }
+
+  // Диалоги (без изменений)
+  void _showDeleteSimulationDialog(LifeSimulation simulation) {
+    JourneyHelpers.showDeleteSimulationDialog(
+      context,
+      simulation,
+      () => _deleteSimulation(simulation.id),
+    );
+  }
+
+  void _showDeleteBranchDialog(Branch branch) {
+    JourneyHelpers.showDeleteBranchDialog(
+      context,
+      branch,
+      () => _deleteBranch(branch),
+    );
+  }
+
+  void _showDeleteNodeDialog(Branch branch, int nodeIndex) {
+    JourneyHelpers.showDeleteNodeDialog(
+      context,
+      branch.milestones[nodeIndex],
+      () => _deleteNode(branch, nodeIndex),
+    );
+  }
+
+  // Построение UI (без изменений)
+  @override
+  Widget build(BuildContext context) {
+    final simulationsAsync = ref.watch(lifeSimulationsProvider);
     final canPop = ModalRoute.of(context)?.canPop ?? false;
+
+    if (_isLoading) {
+      return JourneyWidgets.buildLoadingScreen(_loadingController);
+    }
+
+    if (_hasError) {
+      return JourneyWidgets.buildErrorScreen(
+        context,
+        _errorMessage,
+        _refreshData,
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F19),
@@ -29,12 +442,8 @@ class JourneyScreen extends ConsumerWidget {
             : IconButton(
                 icon: const Icon(Icons.home, color: Colors.white),
                 onPressed: () {
-                  // Если нельзя вернуться назад, идем на главную
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const MainLayout(), // или ваш главный экран
-                    ),
+                    MaterialPageRoute(builder: (_) => const MainLayout()),
                     (route) => false,
                   );
                 },
@@ -51,61 +460,19 @@ class JourneyScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () => ref.refresh(lifeSimulationsProvider),
+            onPressed: _refreshData,
             tooltip: 'Обновить',
+          ),
+          IconButton(
+            icon: const Icon(Icons.center_focus_strong, color: Colors.white),
+            onPressed: _resetView,
+            tooltip: 'Центрировать',
           ),
         ],
       ),
-      body: simulationsAsync.when(
-        data: (simulations) => _buildContent(context, simulations),
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: Color(0xFF6366F1)),
-        ),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: Color(0xFFEF4444),
-                  size: 50,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Ошибка загрузки',
-                  style: TextStyle(
-                    color: const Color(0xFF94A3B8),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  error.toString(),
-                  style: const TextStyle(color: Color(0xFF94A3B8)),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => ref.refresh(lifeSimulationsProvider),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                  ),
-                  child: const Text('Повторить'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      body: _buildContent(simulationsAsync),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LifeSimulationScreen()),
-          );
-        },
+        onPressed: () => _createNewMainBranchSimulation(),
         backgroundColor: const Color(0xFF6366F1),
         icon: const Icon(Icons.auto_awesome, color: Colors.white),
         label: const Text(
@@ -116,530 +483,395 @@ class JourneyScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, List<LifeSimulation> simulations) {
-    // Конвертируем симуляции в вехи
-    final milestones = _convertSimulationsToMilestones(simulations);
+  Widget _buildContent(AsyncValue<List<LifeSimulation>> simulationsAsync) {
+    return simulationsAsync.when(
+      data: (simulations) => _buildJourneyContent(simulations),
+      loading: () => JourneyWidgets.buildLoadingScreen(_loadingController),
+      error: (error, stackTrace) =>
+          JourneyWidgets.buildErrorScreen(context, _errorMessage, _refreshData),
+    );
+  }
+
+  Widget _buildJourneyContent(List<LifeSimulation> simulations) {
+    // Разделяем ветки на вертикальные и горизонтальные
+    final verticalBranches = _branches.where((b) => b.isVertical).toList();
+    final horizontalBranches = _branches.where((b) => !b.isVertical).toList();
+
+    // Находим главную ветку (column == 0)
+    final mainBranch = verticalBranches.firstWhere(
+      (branch) => branch.column == 0,
+      orElse: () => verticalBranches.isNotEmpty
+          ? verticalBranches.first
+          : Branch(
+              id: 'empty',
+              column: 0,
+              row: 0,
+              milestones: [],
+              isVertical: true,
+              direction: BranchDirection.none,
+            ),
+    );
+
+    // Остальные вертикальные ветки (не главная)
+    final otherVerticalBranches = verticalBranches
+        .where((b) => b.column != 0)
+        .toList();
 
     return Stack(
       children: [
-        // Фоновый атмосферный градиент
-        Positioned(
-          top: -100,
-          right: -100,
+        InteractiveViewer(
+          transformationController: _transformationController,
+          boundaryMargin: const EdgeInsets.all(3000),
+          minScale: 0.5,
+          maxScale: 2.0,
+          constrained: false,
           child: Container(
-            width: 400,
-            height: 400,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  const Color(0xFF6366F1).withValues(alpha: .2),
-                  Colors.transparent,
-                ],
-              ),
+            width: 6000,
+            height: 6000,
+            color: const Color(0xFF0B0F19),
+            child: Stack(
+              children: [
+                JourneyWidgets.buildBackgroundGrid(),
+                // 1. Сначала рисуем главную ветку
+                if (mainBranch.milestones.isNotEmpty)
+                  _buildMainBranch(mainBranch),
+                // 2. Затем горизонтальные ветки (ответвления)
+                ...horizontalBranches.map(
+                  (branch) => _buildHorizontalBranch(branch),
+                ),
+                // 3. Затем остальные вертикальные ветки
+                ...otherVerticalBranches.map(
+                  (branch) => _buildVerticalBranch(branch),
+                ),
+                // 4. Пустой стартовый узел если нет симуляций
+                if (simulations.isEmpty)
+                  Positioned(
+                    left: 800,
+                    top: 200,
+                    child: JourneyWidgets.buildEmptyStartNode(),
+                  ),
+              ],
             ),
           ),
         ),
-
-        CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // Кинематографичный заголовок
-            SliverAppBar.large(
-              backgroundColor: const Color(0xFF0B0F19),
-              expandedHeight: 160,
-              pinned: true,
-              stretch: true,
-              elevation: 0,
-              flexibleSpace: FlexibleSpaceBar(
-                centerTitle: false,
-                titlePadding: const EdgeInsets.only(left: 24, bottom: 16),
-                expandedTitleScale: 1.2,
-                title: ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Colors.white, Color(0xFF94A3B8)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ).createShader(bounds),
-                  child: const Text(
-                    'Ваша История',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                background: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            const Color(0xFF1E293B).withValues(alpha: 0.3),
-                            const Color(0xFF0B0F19),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 60,
-                      left: 24,
-                      child: Text(
-                        _getJourneySubtitle(simulations),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2,
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Список событий или пустое состояние
-            if (milestones.isEmpty)
-              SliverFillRemaining(child: _buildEmptyState(context))
-            else
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    return _CinematicTimelineItem(
-                      data: milestones[index],
-                      isFirst: index == 0,
-                    );
-                  }, childCount: milestones.length),
-                ),
-              ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
-          ],
+        Positioned(
+          bottom: 100,
+          left: 20,
+          child: JourneyWidgets.buildControlsHint(),
         ),
       ],
     );
   }
 
-  String _getJourneySubtitle(List<LifeSimulation> simulations) {
-    if (simulations.isEmpty) {
-      return 'НАЧНИТЕ СВОЙ ПУТЬ';
-    }
+  Widget _buildMainBranch(Branch branch) {
+    const double startX = 800.0;
+    const double startY = 200.0;
+    const double verticalSpacing = 280.0;
 
-    final daysSinceFirst = DateTime.now()
-        .difference(simulations.last.createdAt)
-        .inDays;
-
-    return 'ПУТЬ ДЛИНОЮ В $daysSinceFirst ${_getDaysWord(daysSinceFirst)}';
-  }
-
-  String _getDaysWord(int days) {
-    if (days % 10 == 1 && days % 100 != 11) return 'ДЕНЬ';
-    if ([2, 3, 4].contains(days % 10) && ![12, 13, 14].contains(days % 100)) {
-      return 'ДНЯ';
-    }
-    return 'ДНЕЙ';
-  }
-
-  List<_MilestoneData> _convertSimulationsToMilestones(
-    List<LifeSimulation> simulations,
-  ) {
-    return simulations.asMap().entries.map((entry) {
-      final index = entry.key;
-      final sim = entry.value;
-      final results = sim.results;
-
-      return _MilestoneData(
-        date: _formatDate(sim.createdAt),
-        title: sim.title,
-        description: _extractShortDescription(sim),
-        icon: _getIconForSimulation(sim),
-        isActive: index == 0,
-        isLast: index == simulations.length - 1,
-        score: results['totalScore'] as double,
-      );
-    }).toList();
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-
-    if (diff.inDays == 0) return 'СЕГОДНЯ';
-    if (diff.inDays == 1) return 'ВЧЕРА';
-    if (diff.inDays < 7) {
-      return '${diff.inDays} ${_getDaysWord(diff.inDays)} НАЗАД';
-    }
-
-    const months = [
-      '',
-      'ЯНВ',
-      'ФЕВ',
-      'МАР',
-      'АПР',
-      'МАЙ',
-      'ИЮН',
-      'ИЮЛ',
-      'АВГ',
-      'СЕН',
-      'ОКТ',
-      'НОЯ',
-      'ДЕК',
-    ];
-    return '${months[date.month]} ${date.year}';
-  }
-
-  String _extractShortDescription(LifeSimulation sim) {
-    final results = sim.results;
-    final readiness = results['readinessLevel'] as String;
-    final score = results['totalScore'] as double;
-    final scorePercent = (score * 100).toStringAsFixed(0);
-
-    return '$readiness. Общий балл: $scorePercent%';
-  }
-
-  IconData _getIconForSimulation(LifeSimulation sim) {
-    final score = sim.results['totalScore'] as double;
-
-    if (score >= 0.85) return Icons.auto_awesome;
-    if (score >= 0.7) return Icons.bolt_rounded;
-    if (score >= 0.5) return Icons.graphic_eq;
-    return Icons.flag_rounded;
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF6366F1).withValues(alpha: 0.2),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-              child: const Icon(
-                Icons.auto_awesome,
-                size: 64,
-                color: Color(0xFF6366F1),
-              ),
-            ),
-            const SizedBox(height: 32),
-            const Text(
-              'Начните свой путь',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Пройдите симуляцию жизни, чтобы\nувидеть свою историю развития',
-              style: TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 16,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const LifeSimulationScreen(),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: const Icon(Icons.play_arrow, color: Colors.white),
-              label: const Text(
-                'Начать симуляцию',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+    return Stack(
+      children: [
+        Positioned(
+          left: startX,
+          top: startY,
+          child: CustomPaint(
+            size: Size(44, branch.milestones.length * verticalSpacing),
+            painter: VerticalBranchLinePainter(isActive: true),
+          ),
         ),
-      ),
-    );
-  }
-}
-
-// Модель данных
-class _MilestoneData {
-  final String date;
-  final String title;
-  final String description;
-  final IconData icon;
-  final bool isActive;
-  final bool isLast;
-  final double score;
-
-  _MilestoneData({
-    required this.date,
-    required this.title,
-    required this.description,
-    required this.icon,
-    this.isActive = false,
-    this.isLast = false,
-    this.score = 0.0,
-  });
-}
-
-class _CinematicTimelineItem extends StatelessWidget {
-  final _MilestoneData data;
-  final bool isFirst;
-
-  const _CinematicTimelineItem({required this.data, required this.isFirst});
-
-  @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Левая колонка: Дата + Линия
-          SizedBox(
-            width: 50,
-            child: Column(
+        for (int i = 0; i < branch.milestones.length; i++)
+          Positioned(
+            left: startX,
+            top: startY + i * verticalSpacing,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _GlowingNode(isActive: data.isActive, icon: data.icon),
-                if (!data.isLast)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            data.isActive
-                                ? const Color(0xFF6366F1)
-                                : const Color(0xFF334155),
-                            data.isActive
-                                ? const Color(0xFF6366F1).withValues(alpha: 0.1)
-                                : const Color(
-                                    0xFF334155,
-                                  ).withValues(alpha: 0.1),
-                          ],
-                        ),
-                        boxShadow: data.isActive
-                            ? [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF6366F1,
-                                  ).withValues(alpha: 0.5),
-                                  blurRadius: 8,
-                                  spreadRadius: 1,
-                                ),
-                              ]
-                            : [],
+                if (i < branch.milestones.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: NewBranchButton(
+                      onPressed: () => _createBranchFromMilestone(
+                        branch,
+                        i,
+                        direction: BranchDirection.left,
                       ),
+                      size: 40,
+                      tooltip: 'Ответвление влево',
+                    ),
+                  )
+                else
+                  const SizedBox(width: 52),
+                GestureDetector(
+                  onLongPress: () => _showDeleteNodeDialog(branch, i),
+                  child: GlowingNode(
+                    isActive: true,
+                    icon: Icons.radio_button_checked,
+                  ),
+                ),
+                const SizedBox(width: 24),
+                GestureDetector(
+                  onLongPress: () => _showDeleteSimulationDialog(
+                    branch.milestones[i].simulation,
+                  ),
+                  child: MilestoneCard(
+                    milestone: branch.milestones[i],
+                    onDelete: () => _showDeleteSimulationDialog(
+                      branch.milestones[i].simulation,
+                    ),
+                  ),
+                ),
+                if (i < branch.milestones.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: NewBranchButton(
+                      onPressed: () => _createBranchFromMilestone(
+                        branch,
+                        i,
+                        direction: BranchDirection.right,
+                      ),
+                      size: 40,
+                      tooltip: 'Ответвление вправо',
                     ),
                   ),
               ],
             ),
           ),
-          const SizedBox(width: 20),
-
-          // Правая колонка: Контент
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 48, top: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    data.date,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: data.isActive
-                          ? const Color(0xFF818CF8)
-                          : const Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    data.title,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: data.isActive
-                          ? Colors.white
-                          : const Color(0xFFE2E8F0),
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    data.description,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      height: 1.6,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                  if (data.score > 0) ...[
-                    const SizedBox(height: 12),
-                    _ScoreIndicator(score: data.score),
-                  ],
-                ],
-              ),
-            ),
+        Positioned(
+          left: startX,
+          top: startY + branch.milestones.length * verticalSpacing,
+          child: NewBranchButton(
+            onPressed: () => _continueMainBranch(branch),
+            size: 60,
+            tooltip: 'Продолжить основную ветку',
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GlowingNode extends StatelessWidget {
-  final bool isActive;
-  final IconData icon;
-
-  const _GlowingNode({required this.isActive, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0F19),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: isActive ? const Color(0xFF6366F1) : const Color(0xFF334155),
-          width: 2,
         ),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ]
-            : [],
-      ),
-      child: Center(
-        child: isActive
-            ? _PulsingIcon(icon: icon)
-            : Icon(icon, size: 18, color: const Color(0xFF475569)),
-      ),
+      ],
     );
   }
-}
 
-class _PulsingIcon extends StatefulWidget {
-  final IconData icon;
-  const _PulsingIcon({required this.icon});
+  Widget _buildVerticalBranch(Branch branch) {
+    const double startX = 800.0;
+    const double startY = 200.0;
+    const double columnWidth = 600.0;
+    const double verticalSpacing = 280.0;
 
-  @override
-  State<_PulsingIcon> createState() => _PulsingIconState();
-}
+    final branchStartX = startX + branch.column * columnWidth;
 
-class _PulsingIconState extends State<_PulsingIcon>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-
-    _animation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Icon(
-          widget.icon,
-          size: 18,
-          color: const Color(0xFF6366F1).withValues(alpha: _animation.value),
-        );
-      },
-    );
-  }
-}
-
-class _ScoreIndicator extends StatelessWidget {
-  final double score;
-
-  const _ScoreIndicator({required this.score});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
+    return Stack(
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+        Positioned(
+          left: branchStartX,
+          top: startY,
+          child: GestureDetector(
+            onLongPress: () => _showDeleteBranchDialog(branch),
+            child: CustomPaint(
+              size: Size(44, branch.milestones.length * verticalSpacing),
+              painter: VerticalBranchLinePainter(isActive: true),
             ),
           ),
+        ),
+        for (int i = 0; i < branch.milestones.length; i++)
+          Positioned(
+            left: branchStartX,
+            top: startY + i * verticalSpacing,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (i < branch.milestones.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: NewBranchButton(
+                      onPressed: () => _createBranchFromMilestone(
+                        branch,
+                        i,
+                        direction: BranchDirection.left,
+                      ),
+                      size: 40,
+                      tooltip: 'Ответвление влево',
+                    ),
+                  )
+                else
+                  const SizedBox(width: 52),
+                GestureDetector(
+                  onLongPress: () => _showDeleteNodeDialog(branch, i),
+                  child: GlowingNode(isActive: true, icon: Icons.account_tree),
+                ),
+                const SizedBox(width: 24),
+                GestureDetector(
+                  onLongPress: () => _showDeleteSimulationDialog(
+                    branch.milestones[i].simulation,
+                  ),
+                  child: MilestoneCard(
+                    milestone: branch.milestones[i],
+                    onDelete: () => _showDeleteSimulationDialog(
+                      branch.milestones[i].simulation,
+                    ),
+                  ),
+                ),
+                if (i < branch.milestones.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: NewBranchButton(
+                      onPressed: () => _createBranchFromMilestone(
+                        branch,
+                        i,
+                        direction: BranchDirection.right,
+                      ),
+                      size: 40,
+                      tooltip: 'Ответвление вправо',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        Positioned(
+          left: branchStartX,
+          top: startY + branch.milestones.length * verticalSpacing,
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.star, size: 14, color: const Color(0xFF6366F1)),
-              const SizedBox(width: 4),
-              Text(
-                '${(score * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(
-                  color: Color(0xFF818CF8),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+              NewBranchButton(
+                onPressed: () => _continueVerticalBranch(branch),
+                size: 60,
+                tooltip: 'Продолжить ветку',
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => _showDeleteBranchDialog(branch),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFEF4444).withOpacity(0.5),
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHorizontalBranch(Branch branch) {
+    const double startX = 800.0;
+    const double startY = 200.0;
+    const double columnWidth = 600.0;
+    const double verticalSpacing = 280.0;
+    const double horizontalSpacing = 380.0;
+    const double branchOffsetY = 140.0;
+
+    // Вычисляем позицию родительского узла
+    final parentColumn = branch.parentBranch?.column ?? branch.column;
+    final parentRow = branch.parentMilestoneIndex ?? branch.row;
+
+    final parentX = startX + parentColumn * columnWidth;
+    final parentY =
+        startY + parentRow * verticalSpacing + 22; // +22 для центра узла
+
+    // Определяем направление ветки
+    final isLeft = branch.direction == BranchDirection.left;
+
+    // Начальная позиция горизонтальной ветки
+    final branchStartX = isLeft
+        ? parentX - horizontalSpacing
+        : parentX + 44 + 24 + 280 + 12; // Отступ от правой стороны карточки
+    final branchStartY = parentY + branchOffsetY;
+
+    return Stack(
+      children: [
+        // Соединительная линия от родительского узла к горизонтальной ветке
+        Positioned(
+          left: isLeft ? branchStartX + 44 : parentX + 44,
+          top: parentY,
+          child: CustomPaint(
+            size: Size((branchStartX - parentX).abs(), branchOffsetY),
+            painter: ConnectorLinePainter(direction: branch.direction),
+          ),
+        ),
+        // Горизонтальная линия ветки
+        Positioned(
+          left: isLeft
+              ? branchStartX -
+                    (branch.milestones.length - 1) * horizontalSpacing
+              : branchStartX,
+          top: branchStartY,
+          child: CustomPaint(
+            size: Size(branch.milestones.length * horizontalSpacing, 44),
+            painter: HorizontalBranchLinePainter(isActive: true),
+          ),
+        ),
+        // Узлы и карточки вдоль горизонтальной ветки
+        for (int i = 0; i < branch.milestones.length; i++)
+          Positioned(
+            left: isLeft
+                ? branchStartX - i * horizontalSpacing
+                : branchStartX + i * horizontalSpacing,
+            top: branchStartY,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onLongPress: () => _showDeleteNodeDialog(branch, i),
+                  child: GlowingNode(isActive: true, icon: Icons.alt_route),
+                ),
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onLongPress: () => _showDeleteSimulationDialog(
+                    branch.milestones[i].simulation,
+                  ),
+                  child: MilestoneCard(
+                    milestone: branch.milestones[i],
+                    onDelete: () => _showDeleteSimulationDialog(
+                      branch.milestones[i].simulation,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        // Кнопка продолжения и удаления в конце ветки
+        Positioned(
+          left: isLeft
+              ? branchStartX - branch.milestones.length * horizontalSpacing
+              : branchStartX + branch.milestones.length * horizontalSpacing,
+          top: branchStartY,
+          child: Row(
+            children: [
+              NewBranchButton(
+                onPressed: () => _continueHorizontalBranch(branch),
+                size: 60,
+                tooltip: 'Продолжить ответвление',
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => _showDeleteBranchDialog(branch),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFEF4444).withOpacity(0.5),
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
                 ),
               ),
             ],

@@ -60,12 +60,8 @@ class _LifeSimulationScreenState extends ConsumerState<LifeSimulationScreen> {
         // Очищаем состояние
         ref.read(simulationStateProvider.notifier).state = {};
 
-        // Показываем результаты
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => SimulationResultScreen(simulation: simulation),
-          ),
-        );
+        // Возвращаем созданную симуляцию
+        Navigator.of(context).pop(simulation);
       }
     } finally {
       if (mounted) {

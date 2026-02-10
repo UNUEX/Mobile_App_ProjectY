@@ -189,4 +189,76 @@ class LifeSimulationRepository {
   void clearCache() {
     _cachedSimulations = null;
   }
+
+  // Сохранение информации о ветках и связях
+  Future<void> saveBranchInfo({
+    required String simulationId,
+    required Map<String, dynamic> branchInfo,
+  }) async {
+    try {
+      await _supabase.from('simulation_branches').upsert({
+        'simulation_id': simulationId,
+        'branch_info': branchInfo,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      Log.i('Branch info saved for simulation: $simulationId');
+    } catch (e, stackTrace) {
+      Log.e('Error saving branch info', error: e, stackTrace: stackTrace);
+    }
+  }
+
+  // Получение информации о ветках для симуляции
+  Future<Map<String, dynamic>?> getBranchInfo(String simulationId) async {
+    try {
+      final response = await _supabase
+          .from('simulation_branches')
+          .select()
+          .eq('simulation_id', simulationId)
+          .maybeSingle();
+
+      if (response != null) {
+        return Map<String, dynamic>.from(response['branch_info'] ?? {});
+      }
+      return null;
+    } catch (e, stackTrace) {
+      Log.e('Error fetching branch info', error: e, stackTrace: stackTrace);
+      return null;
+    }
+  }
+
+  // Удаление информации о ветках при удалении симуляции
+  Future<void> deleteBranchInfo(String simulationId) async {
+    try {
+      await _supabase
+          .from('simulation_branches')
+          .delete()
+          .eq('simulation_id', simulationId);
+
+      Log.i('Branch info deleted for simulation: $simulationId');
+    } catch (e, stackTrace) {
+      Log.e('Error deleting branch info', error: e, stackTrace: stackTrace);
+    }
+  }
+
+  // Получение всех связей между симуляциями
+  Future<List<Map<String, dynamic>>> getBranchConnections() async {
+    try {
+      final response = await _supabase
+          .from('simulation_branches')
+          .select()
+          .eq('user_id', userId);
+
+      return (response as List)
+          .map((json) => Map<String, dynamic>.from(json))
+          .toList();
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error fetching branch connections',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return [];
+    }
+  }
 }

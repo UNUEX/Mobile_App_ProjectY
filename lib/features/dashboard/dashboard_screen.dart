@@ -63,8 +63,6 @@ class _DashboardScreenRedesignedState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 10),
-                        _buildGreetingSection(),
                         const SizedBox(height: 24),
                         _buildHeroCard(context),
                         const SizedBox(height: 30),
@@ -200,32 +198,6 @@ class _DashboardScreenRedesignedState extends State<DashboardScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildGreetingSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Good Morning,',
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.grey.shade600,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Alex Johnson',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF2D1B4E),
-            letterSpacing: -0.5,
-          ),
-        ),
-      ],
     );
   }
 

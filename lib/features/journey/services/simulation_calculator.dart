@@ -9,6 +9,9 @@ class SimulationCalculator {
   static LifeSimulation processSimulation({
     required String userId,
     required Map<String, dynamic> answers,
+
+    String? parentSimulationId,
+    Map<String, dynamic>? branchInfo,
   }) {
     final results = _calculateResults(answers);
     final summary = _generateSummary(answers, results);
@@ -16,7 +19,7 @@ class SimulationCalculator {
     final tags = _generateTags(answers, results);
     final title = _generateTitle(answers, results);
 
-    return LifeSimulation(
+    final simulation = LifeSimulation(
       id: _uuid.v4(), // Правильный UUID v4 формат
       userId: userId,
       title: title,
@@ -27,6 +30,16 @@ class SimulationCalculator {
       emotionalTone: emotionalTone,
       tags: tags,
     );
+    // Добавляем информацию о связях
+    if (parentSimulationId != null || branchInfo != null) {
+      simulation.answers['_branch_info'] = {
+        'parent_simulation_id': parentSimulationId,
+        'branch_data': branchInfo,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+    }
+
+    return simulation;
   }
 
   // Расчет результатов на основе ответов

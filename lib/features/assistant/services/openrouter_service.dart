@@ -6,18 +6,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yauctor_ai/core/utils/logger_service.dart';
 import 'package:yauctor_ai/features/assistant/services/ai_assistant_commands.dart';
 import 'package:yauctor_ai/features/home/providers/daily_reflection_provider.dart';
-
 // Добавьте этот импорт вверху файла
 import '../../journey/providers/life_simulation_provider.dart';
 
 class OpenRouterService {
   static const String _apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
-  static const String defaultModel = 'google/gemini-2.0-flash-exp:free';
-
+  static const String defaultModel = 'stepfun/step-3.5-flash:free';
   static const List<String> fallbackModels = [
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'mistralai/devstral-2512:free',
-    'google/gemma-3-27b-it:free',
+    'arcee-ai/trinity-large-preview:free',
+    'upstage/solar-pro-3:free',
+    'liquid/lfm-2.5-1.2b-instruct:free',
+    'liquid/lfm-2.5-1.2b-thinking:free',
   ];
 
   String get _apiKey => dotenv.env['OPENROUTER_API_KEY'] ?? '';
@@ -38,7 +37,6 @@ class OpenRouterService {
     // Получаем данные симуляций через провайдер
     final simulationData = await _getSimulationData(ref);
     final journalEntries = _getJournalEntries(ref);
-
     final systemPrompt = _buildSystemPrompt(simulationData, journalEntries);
 
     final messages = [
@@ -66,7 +64,6 @@ class OpenRouterService {
   Future<Map<String, dynamic>> _getSimulationData(WidgetRef ref) async {
     try {
       final simulationsAsync = await ref.read(lifeSimulationsProvider.future);
-
       final simulationsJson = simulationsAsync
           .map(
             (sim) => ({
@@ -80,7 +77,6 @@ class OpenRouterService {
             }),
           )
           .toList();
-
       return {
         'simulations': simulationsJson,
         'hasSimulations': simulationsJson.isNotEmpty,
@@ -126,7 +122,6 @@ class OpenRouterService {
   ) async {
     try {
       Log.d('Sending request to model: $model');
-
       final response = await http
           .post(
             Uri.parse(_apiUrl),
@@ -165,33 +160,26 @@ class OpenRouterService {
 
   String _getMockResponse(String userMessage) {
     final lowerMessage = userMessage.toLowerCase();
-
     // Проверка команд симуляции в тестовом режиме
     if (SimulationCommands.isSimulationCommand(lowerMessage)) {
       return '''
 🎯 Тестовая команда симуляции распознана!
-
-В рабочем режиме я бы предложил вам начать симуляцию жизненного пути. 
+В рабочем режиме я бы предложил вам начать симуляцию жизненного пути.
 Добавьте OPENROUTER_API_KEY в .env файл для полной функциональности.
 ''';
     }
-
     if (SimulationCommands.isSimulationHistoryRequest(lowerMessage)) {
       return '''
 📖 Тестовая команда истории симуляций распознана!
-
 В рабочем режиме я бы показал вам все ваши пройденные симуляции и прогресс.
 ''';
     }
-
     if (lowerMessage.contains('привет') || lowerMessage.contains('hello')) {
       return "Привет! Я в тестовом режиме. Добавьте API ключ для полной функциональности.";
     }
-
     if (lowerMessage.contains('сохрани') && lowerMessage.contains('дневник')) {
       return "Команда сохранения в дневник обрабатывается отдельно.\n(Для работы AI нужен API ключ в .env)";
     }
-
     return "Режим тестирования. Добавьте OPENROUTER_API_KEY в .env файл.";
   }
 
@@ -205,40 +193,31 @@ class OpenRouterService {
   ) {
     final simulationCount = simulationData['simulationCount'] as int? ?? 0;
     final journalCount = journalEntries.length;
-
     return '''
 Ты Yauctor — AI-помощник для личностного роста и саморазвития.
-
 ОТВЕЧАЙ КРАТКО. 1-2 предложения.
-
 КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ:
 • Симуляций жизненного пути: $simulationCount ${simulationCount == 0 ? '(нет)' : ''}
 • Записей в дневнике: $journalCount
-
 СПЕЦИАЛЬНЫЕ КОМАНДЫ:
 1. Если пользователь хочет симуляцию (спросит "проведи симуляцию", "хочу симуляцию" и т.д.):
    - Объясни пользу симуляции
    - Предложи начать
    - НЕ проводи симуляцию в чате - отправляй на специальный экран
-
 2. Если спрашивает про прошлые симуляции ("мои симуляции", "история симуляций"):
    - Расскажи сколько их было
    - Предложи посмотреть в разделе Journey
    - Дай краткую сводку
-
 ПРАВИЛА ОБЩЕНИЯ:
 1. Отвечай кратко и по делу
 2. Не философствуй без необходимости
 3. Будь поддерживающим и мотивирующим
 4. Для технических вопросов по симуляциям - направляй в соответствующие разделы
-
 ПРИМЕРЫ ОТВЕТОВ:
 Пользователь: "проведи симуляцию"
 Ты: "Отлично! Симуляция поможет понять ваши ценности и цели. Начнем?"
-
 Пользователь: "какие у меня симуляции?"
 Ты: "У вас $simulationCount симуляций. Хотите посмотреть подробности в разделе Journey?"
-
 Пользователь: "хочу понять свои цели"
 Ты: "Симуляция - отличный способ! Она задаст важные вопросы о ценностях и поможет составить план."
 ''';

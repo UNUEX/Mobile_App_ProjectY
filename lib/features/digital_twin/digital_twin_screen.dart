@@ -329,8 +329,24 @@ class _DigitalTwinScreenState extends State<DigitalTwinScreen> {
   // --- 3. DASHBOARD SCREEN (Финальный результат, image_d5f2c0.png) ---
   Widget _buildDashboardScreen() {
     return Scaffold(
-      backgroundColor: Colors
-          .white, // Можно использовать серый 0xFFF9FAFB, но на скрине белый
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () => Navigator.pop(context),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Digital Twin',
+          style: TextStyle(
+            color: Colors.black87,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -520,7 +536,6 @@ class _DigitalTwinScreenState extends State<DigitalTwinScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  // !!! ВОТ ЗДЕСЬ ИЗМЕНЕНИЕ !!!
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -562,7 +577,6 @@ class _DigitalTwinScreenState extends State<DigitalTwinScreen> {
       ),
     );
   }
-
   // --- Helpers & Reusable Widgets ---
 
   // Helper для построения баров в Intro

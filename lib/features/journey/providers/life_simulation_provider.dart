@@ -48,7 +48,11 @@ class LifeSimulationsNotifier extends AsyncNotifier<List<LifeSimulation>> {
   }
 
   // Создание новой симуляции из ответов
-  Future<LifeSimulation?> createSimulation(Map<String, dynamic> answers) async {
+  Future<LifeSimulation?> createSimulation(
+    Map<String, dynamic> answers, {
+    String? parentSimulationId,
+    Map<String, dynamic>? branchInfo,
+  }) async {
     final repository = _repository;
     if (repository == null) {
       Log.w('Cannot create simulation: User not authenticated');
@@ -58,14 +62,28 @@ class LifeSimulationsNotifier extends AsyncNotifier<List<LifeSimulation>> {
     state = const AsyncValue.loading();
 
     try {
-      // Обрабатываем ответы через калькулятор
+      // Обрабатываем ответы через калькулятор с информацией о ветках
       final simulation = SimulationCalculator.processSimulation(
         userId: repository.userId,
         answers: answers,
+        parentSimulationId: parentSimulationId,
+        branchInfo: branchInfo,
       );
 
       // Сохраняем в Supabase
       await repository.saveSimulation(simulation);
+
+      // Сохраняем информацию о ветках если есть
+      if (parentSimulationId != null || branchInfo != null) {
+        await repository.saveBranchInfo(
+          simulationId: simulation.id,
+          branchInfo: {
+            'parent_simulation_id': parentSimulationId,
+            'branch_data': branchInfo,
+            'created_at': DateTime.now().toIso8601String(),
+          },
+        );
+      }
 
       // Обновляем состояние
       final simulations = await repository.getSimulations();
@@ -76,6 +94,37 @@ class LifeSimulationsNotifier extends AsyncNotifier<List<LifeSimulation>> {
       state = AsyncValue.error(e, stackTrace);
       Log.e('Error creating simulation', error: e, stackTrace: stackTrace);
       return null;
+    }
+  }
+
+  // Добавим метод для удаления с очисткой связей
+  Future<void> deleteSimulationWithConnections(String id) async {
+    final repository = _repository;
+    if (repository == null) {
+      Log.w('Cannot delete simulation: User not authenticated');
+      return;
+    }
+
+    state = const AsyncValue.loading();
+
+    try {
+      // Удаляем информацию о ветках
+      await repository.deleteBranchInfo(id);
+
+      // Удаляем симуляцию
+      await repository.deleteSimulation(id);
+
+      // Обновляем список
+      final simulations = await repository.getSimulations();
+      state = AsyncValue.data(simulations);
+    } catch (e, stackTrace) {
+      state = AsyncValue.error(e, stackTrace);
+      Log.e(
+        'Error deleting simulation with connections',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
     }
   }
 

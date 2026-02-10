@@ -4,6 +4,5 @@ class ApiConfig {
     'OPENROUTER_API_KEY',
     defaultValue: '', // В продакшене использовать .env
   );
-
   static const String openRouterApiUrl = 'https://openrouter.ai/api/v1';
 }
