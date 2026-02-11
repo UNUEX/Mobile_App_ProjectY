@@ -1,7 +1,10 @@
 // lib/features/assistant/assistant_screen.dart
+// ignore_for_file: unused_import
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:yauctor_ai/features/journey/screens/journeys_overview_screen.dart';
 import 'chat_message_model.dart';
 import 'services/openrouter_service.dart';
 import 'services/ai_assistant_commands.dart'; // Добавлен импорт
@@ -153,9 +156,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         children: [
           SimulationActionButton(
             label: 'Посмотреть все симуляции',
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const JourneyScreen())),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const JourneysOverviewScreen()),
+            ),
             icon: Icons.timeline,
           ),
           const SizedBox(height: 8),
@@ -291,9 +294,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
               isLabelVisible: simulationCount > 0,
               child: const Icon(Icons.timeline_outlined),
             ),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const JourneyScreen())),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const JourneysOverviewScreen()),
+            ),
             tooltip: 'Мой путь (симуляции)',
           ),
           IconButton(

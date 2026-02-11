@@ -1,5 +1,8 @@
 // lib/core/router/app_router.dart
+// ignore_for_file: unused_import
+
 import 'package:flutter/material.dart';
+import 'package:yauctor_ai/features/journey/screens/journeys_overview_screen.dart';
 import 'package:yauctor_ai/ui/layout/main_layout.dart';
 import '../../features/simulation/simulation_screen.dart';
 import '../../features/analytics/analytics_screen.dart';
@@ -52,7 +55,9 @@ class AppRouter {
 
       // Добавьте эти case
       case journey:
-        return MaterialPageRoute(builder: (_) => const JourneyScreen());
+        return MaterialPageRoute(
+          builder: (_) => const JourneysOverviewScreen(),
+        );
       case lifeSimulation:
         return MaterialPageRoute(builder: (_) => const LifeSimulationScreen());
 

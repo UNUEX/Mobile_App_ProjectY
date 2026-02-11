@@ -1,7 +1,10 @@
 // lib/features/journey/screens/life_simulation_screen.dart
+// ignore_for_file: unused_import
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yauctor_ai/features/journey/journey_screen.dart';
+import 'package:yauctor_ai/features/journey/screens/journeys_overview_screen.dart';
 import '../models/life_simulation.dart';
 import '../providers/life_simulation_provider.dart';
 
@@ -660,7 +663,9 @@ class SimulationResultScreen extends StatelessWidget {
                   onPressed: () {
                     // ВАЖНО: Используйте pushAndRemoveUntil для очистки стека
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const JourneyScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const JourneysOverviewScreen(),
+                      ),
                       (route) => false, // Удаляем все предыдущие экраны
                     );
                   },

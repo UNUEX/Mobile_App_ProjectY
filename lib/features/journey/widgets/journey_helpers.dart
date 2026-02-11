@@ -28,7 +28,7 @@ class JourneyHelpers {
     );
   }
 
-  // ПРЕОБРАЗОВАНИЕ СПИСКА СИМУЛЯЦИЙ В ВЕХИ (ДОБАВЛЕНО)
+  // ПРЕОБРАЗОВАНИЕ СПИСКА СИМУЛЯЦИЙ В ВЕХИ
   static List<Milestone> convertSimulationsToMilestones(
     List<LifeSimulation> simulations,
   ) {
@@ -37,17 +37,23 @@ class JourneyHelpers {
         .toList();
   }
 
-  // ЗАГРУЗКА ВЕТОК ИЗ БАЗЫ ДАННЫХ
+  // ЗАГРУЗКА ВЕТОК ИЗ БАЗЫ ДАННЫХ (обновлено для работы с containerId)
   static Future<void> loadBranchesFromDatabase(
     String userId,
+    String containerId,
     List<LifeSimulation> simulations,
     void Function(List<Branch>, int) updateState,
   ) async {
     try {
-      final branchRepository = BranchRepository(userId: userId);
-      print('DEBUG: Starting branch loading for user: $userId');
+      final branchRepository = BranchRepository(
+        userId: userId,
+        containerId: containerId,
+      );
+      print(
+        'DEBUG: Starting branch loading for user: $userId, container: $containerId',
+      );
 
-      // Получаем ветки из базы
+      // Получаем ветки из базы для этого контейнера
       final branchStructures = await branchRepository.getBranches();
       print('DEBUG: Got ${branchStructures.length} branches from DB');
 
@@ -76,9 +82,11 @@ class JourneyHelpers {
           // Сохраняем в базу
           await saveBranchToDatabase(
             userId,
+            containerId,
             BranchStructure(
               userId: userId,
               branchId: branch.id,
+              containerId: containerId,
               column: branch.column,
               row: branch.row,
               isVertical: branch.isVertical,
@@ -122,6 +130,8 @@ class JourneyHelpers {
               milestones: milestones,
               isVertical: branchStructure.isVertical,
               direction: _parseBranchDirection(branchStructure.direction),
+              parentBranchId: branchStructure.parentBranchId,
+              containerId: branchStructure.containerId,
             );
             branches.add(branch);
 
@@ -155,13 +165,17 @@ class JourneyHelpers {
     }
   }
 
-  // Работа с базой данных
+  // Работа с базой данных (обновлено)
   static Future<void> saveBranchToDatabase(
     String userId,
+    String containerId,
     BranchStructure branch,
   ) async {
     try {
-      final branchRepository = BranchRepository(userId: userId);
+      final branchRepository = BranchRepository(
+        userId: userId,
+        containerId: containerId,
+      );
       await branchRepository.saveBranch(branch);
       print('DEBUG: Saved branch ${branch.branchId} to database');
     } catch (e) {
@@ -172,10 +186,14 @@ class JourneyHelpers {
 
   static Future<void> updateBranchInDatabase(
     String userId,
+    String containerId,
     Branch branch,
   ) async {
     try {
-      final branchRepository = BranchRepository(userId: userId);
+      final branchRepository = BranchRepository(
+        userId: userId,
+        containerId: containerId,
+      );
       await branchRepository.updateBranchSimulations(
         branch.id,
         branch.milestones.map((m) => m.id).toList(),
@@ -189,10 +207,14 @@ class JourneyHelpers {
 
   static Future<void> deleteBranchFromDatabase(
     String userId,
+    String containerId,
     String branchId,
   ) async {
     try {
-      final branchRepository = BranchRepository(userId: userId);
+      final branchRepository = BranchRepository(
+        userId: userId,
+        containerId: containerId,
+      );
       await branchRepository.deleteBranch(branchId);
       print('DEBUG: Deleted branch $branchId from database');
     } catch (e) {

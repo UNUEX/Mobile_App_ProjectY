@@ -4,7 +4,7 @@ import '../../features/home/home_screen.dart';
 import '../../features/assistant/assistant_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
-import '../../features/journey/journey_screen.dart';
+import '../../features/journey/screens/journeys_overview_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -19,7 +19,7 @@ class _MainLayoutState extends State<MainLayout> {
   final List<Widget> _screens = const [
     HomeScreen(),
     DashboardScreen(),
-    JourneyScreen(),
+    JourneysOverviewScreen(),
     AssistantScreen(),
     ProfileScreen(),
   ];

@@ -6,9 +6,11 @@ class BranchStructure {
   final String userId;
   final String branchId;
   final String? parentBranchId;
+  final String? containerId; // ID контейнера путешествия
   final int column;
   final int row;
   final bool isVertical;
+  final bool isTopLevel; // Новое поле: является ли ветка top-level
   final String direction; // 'left', 'right', 'none'
   final List<String> simulationIds;
   final DateTime createdAt;
@@ -19,11 +21,13 @@ class BranchStructure {
     required this.userId,
     required this.branchId,
     this.parentBranchId,
+    this.containerId,
     required this.column,
     required this.row,
     required this.isVertical,
     required this.direction,
     required this.simulationIds,
+    this.isTopLevel = false, // По умолчанию false
     DateTime? createdAt,
     DateTime? updatedAt,
   }) : id = id ?? const Uuid().v4(),
@@ -40,6 +44,7 @@ class BranchStructure {
       userId: json['user_id']?.toString() ?? '',
       branchId: json['branch_id']?.toString() ?? '',
       parentBranchId: json['parent_branch_id']?.toString(),
+      containerId: json['container_id']?.toString(),
       column: (columnValue is num
           ? columnValue.toInt()
           : int.tryParse(columnValue.toString()) ?? 0),
@@ -47,6 +52,7 @@ class BranchStructure {
           ? rowValue.toInt()
           : int.tryParse(rowValue.toString()) ?? 0),
       isVertical: json['is_vertical'] == true,
+      isTopLevel: json['is_top_level'] == true,
       direction: json['direction']?.toString() ?? 'none',
       simulationIds: List<String>.from(json['simulation_ids'] ?? []),
       createdAt:
@@ -64,9 +70,11 @@ class BranchStructure {
       'user_id': userId,
       'branch_id': branchId,
       'parent_branch_id': parentBranchId,
+      'container_id': containerId,
       'column': column,
       'row': row,
       'is_vertical': isVertical,
+      'is_top_level': isTopLevel,
       'direction': direction,
       'simulation_ids': simulationIds,
       'created_at': createdAt.toIso8601String(),

@@ -1,5 +1,5 @@
 // lib/features/journey/services/branch_repository.dart
-// ignore_for_file: avoid_print, unused_field
+// ignore_for_file: avoid_print, unused_field, unnecessary_type_check, dead_code, unused_local_variable
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -8,62 +8,75 @@ import '../../../core/utils/logger_service.dart';
 
 class BranchRepository {
   final String userId;
+  final String? containerId; // Фильтр по контейнеру
   final SupabaseClient _supabase = Supabase.instance.client;
   final Uuid _uuid = const Uuid();
 
-  BranchRepository({required this.userId});
+  BranchRepository({required this.userId, this.containerId});
 
-  // Сохранение ветки (ИСПРАВЛЕНО)
+  // Сохранение ветки
   Future<void> saveBranch(BranchStructure branch) async {
     try {
+      // ПРОВЕРЯЕМ simulation_ids
+      final simulationIds = branch.simulationIds;
+
       final data = {
         'id': branch.id,
         'user_id': branch.userId,
         'branch_id': branch.branchId,
         'parent_branch_id': branch.parentBranchId,
+        'container_id': branch.containerId,
         'column': branch.column,
         'row': branch.row,
         'is_vertical': branch.isVertical,
         'direction': branch.direction,
-        'simulation_ids': branch.simulationIds,
+        'simulation_ids': simulationIds, // Убедимся что это List<String>
         'created_at': branch.createdAt.toIso8601String(),
         'updated_at': branch.updatedAt.toIso8601String(),
       };
 
       print('DEBUG: Saving branch to database: ${branch.branchId}');
-      print('DEBUG: Branch data: $data');
+      print('DEBUG: simulation_ids type: ${simulationIds.runtimeType}');
+      print('DEBUG: simulation_ids: $simulationIds');
 
-      try {
-        await _supabase.from('branches').upsert(data);
-        Log.i('Branch saved: ${branch.branchId}');
-      } catch (e) {
-        // Если upsert возвращает ошибку, пробуем insert
-        Log.w('Upsert failed, trying insert: $e');
-        await _supabase.from('branches').insert(data);
-        Log.i('Branch inserted: ${branch.branchId}');
+      // Проверяем каждое значение
+      for (var i = 0; i < simulationIds.length; i++) {
+        if (simulationIds[i] is! String) {
+          print('ERROR: simulation_ids[$i] is not String: ${simulationIds[i]}');
+        }
       }
+
+      // Используем безопасную вставку
+      final response = await _supabase.from('branches').insert(data);
+
+      print('DEBUG: Insert successful');
+      Log.i('Branch inserted: ${branch.branchId}');
     } catch (e, stackTrace) {
       Log.e('Error saving branch', error: e, stackTrace: stackTrace);
+
+      // Дополнительная отладка
+      print('FULL ERROR: $e');
+      print('BRANCH DATA: ${branch.toJson()}');
+
       rethrow;
     }
   }
 
-  // Получение всех веток пользователя (ИСПРАВЛЕНО)
+  // Получение всех веток пользователя (с фильтром по контейнеру если указан)
   Future<List<BranchStructure>> getBranches() async {
     try {
-      print('DEBUG: Fetching branches for user: $userId');
+      print(
+        'DEBUG: Fetching branches for user: $userId, container: $containerId',
+      );
 
-      List<dynamic> response;
-      try {
-        response = await _supabase
-            .from('branches')
-            .select()
-            .eq('user_id', userId)
-            .order('created_at', ascending: true);
-      } catch (e) {
-        Log.e('Supabase query error', error: e);
-        return [];
+      var query = _supabase.from('branches').select().eq('user_id', userId);
+
+      // Фильтруем по containerId если указан
+      if (containerId != null) {
+        query = query.eq('container_id', containerId!);
       }
+
+      List<dynamic> response = await query.order('created_at', ascending: true);
 
       final branches = <BranchStructure>[];
 
@@ -146,10 +159,35 @@ class BranchRepository {
   // Удаление всех веток пользователя
   Future<void> deleteAllBranches() async {
     try {
-      await _supabase.from('branches').delete().eq('user_id', userId);
-      Log.i('All branches deleted for user: $userId');
+      var query = _supabase.from('branches').delete().eq('user_id', userId);
+
+      if (containerId != null) {
+        query = query.eq('container_id', containerId!);
+      }
+
+      await query;
+      Log.i('All branches deleted for user: $userId, container: $containerId');
     } catch (e, stackTrace) {
       Log.e('Error deleting all branches', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  // Удаление всех веток контейнера
+  Future<void> deleteAllBranchesInContainer(String containerId) async {
+    try {
+      await _supabase
+          .from('branches')
+          .delete()
+          .eq('user_id', userId)
+          .eq('container_id', containerId);
+      Log.i('All branches deleted for container: $containerId');
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error deleting container branches',
+        error: e,
+        stackTrace: stackTrace,
+      );
       rethrow;
     }
   }
@@ -157,10 +195,16 @@ class BranchRepository {
   // Получение максимального значения column
   Future<int> getMaxColumn() async {
     try {
-      final response = await _supabase
+      var query = _supabase
           .from('branches')
           .select('column')
-          .eq('user_id', userId)
+          .eq('user_id', userId);
+
+      if (containerId != null) {
+        query = query.eq('container_id', containerId!);
+      }
+
+      final response = await query
           .order('column', ascending: false)
           .limit(1)
           .maybeSingle();
@@ -202,10 +246,16 @@ class BranchRepository {
   // Получить все симуляции, которые уже находятся в ветках
   Future<Set<String>> getAllSimulationIdsInBranches() async {
     try {
-      final response = await _supabase
+      var query = _supabase
           .from('branches')
           .select('simulation_ids')
           .eq('user_id', userId);
+
+      if (containerId != null) {
+        query = query.eq('container_id', containerId!);
+      }
+
+      final response = await query;
 
       final allSimulationIds = <String>{};
 
@@ -328,6 +378,33 @@ class BranchRepository {
         stackTrace: stackTrace,
       );
       rethrow;
+    }
+  }
+
+  // Получить количество симуляций в контейнере
+  Future<int> getSimulationCountInContainer(String containerId) async {
+    try {
+      final response = await _supabase
+          .from('branches')
+          .select('simulation_ids')
+          .eq('user_id', userId)
+          .eq('container_id', containerId);
+
+      final allSimulationIds = <String>{};
+
+      for (final item in response) {
+        final simulationIds = List<String>.from(item['simulation_ids'] ?? []);
+        allSimulationIds.addAll(simulationIds);
+      }
+
+      return allSimulationIds.length;
+    } catch (e, stackTrace) {
+      Log.e(
+        'Error getting simulation count in container',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return 0;
     }
   }
 }

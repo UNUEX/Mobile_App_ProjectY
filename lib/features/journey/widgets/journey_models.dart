@@ -26,19 +26,26 @@ class Branch {
   final int column;
   final int row;
   final List<Milestone> milestones;
-  final Branch? parentBranch;
-  final int? parentMilestoneIndex;
   final bool isVertical;
   final BranchDirection direction;
+  final String? parentBranchId;
+  final String? containerId;
+  Branch? parentBranch;
+  int? parentMilestoneIndex;
 
   Branch({
     required this.id,
     required this.column,
     required this.row,
     required this.milestones,
-    this.parentBranch,
-    this.parentMilestoneIndex,
     required this.isVertical,
     required this.direction,
+    this.parentBranchId,
+    this.containerId,
+    this.parentBranch,
+    this.parentMilestoneIndex,
   });
+
+  // Геттер для определения, является ли ветка top-level
+  bool get isTopLevel => parentBranchId == null;
 }
